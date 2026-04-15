@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+.agent/
+frontend/node_modules/
+frontend/dist/
+*.user
+debug_log.txt
