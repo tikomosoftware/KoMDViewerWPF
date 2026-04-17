@@ -16,7 +16,10 @@ namespace KoMDViewer
     {
         private string currentFilePath = "";
         private string currentMarkdown = "";
+        private string savedMarkdown = "";  // last saved content
         private bool isDark;
+        private bool isEditMode;
+        private bool hasUnsavedChanges;
         private readonly MarkdownPipeline mdPipeline;
 
         private static readonly string[] MarkdownExtensions =
@@ -46,6 +49,7 @@ namespace KoMDViewer
             } catch { }
 
             CenterOnScreen();
+            SetWindowIcon();
             InitializeMica();
             RefreshRecentFilesMenu();
             _ = InitAsync();
@@ -80,6 +84,26 @@ namespace KoMDViewer
             } catch { }
         }
 
+        private void SetWindowIcon()
+        {
+            try {
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+                var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+
+                string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "app-icon.ico");
+                appWindow.SetIcon(iconPath);
+
+                // カスタムタイトルバーにもアイコンを表示
+                string pngPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "app-icon.ico");
+                if (File.Exists(pngPath))
+                {
+                    var bitmapImage = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(pngPath));
+                    TitleBarIcon.Source = bitmapImage;
+                }
+            } catch { }
+        }
+
         private void InitializeMica()
         {
             try {
@@ -92,6 +116,63 @@ namespace KoMDViewer
         {
             try {
                 await WebView.EnsureCoreWebView2Async();
+
+                // Map editor dist folder for edit mode
+                string editorDistPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "editor", "dist");
+                if (Directory.Exists(editorDistPath))
+                {
+                    WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                        "editor.local", editorDistPath,
+                        Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
+                }
+
+                // Listen for messages from the editor
+                WebView.CoreWebView2.WebMessageReceived += (sender, args) => {
+                    try {
+                        string json = args.WebMessageAsJson;
+                        using var doc = JsonDocument.Parse(json);
+                        var root = doc.RootElement;
+                        string type = root.GetProperty("type").GetString() ?? "";
+
+                        if (type == "CONTENT_CHANGED")
+                        {
+                            if (root.TryGetProperty("content", out var content))
+                                currentMarkdown = content.GetString() ?? "";
+                            if (root.TryGetProperty("wordCount", out var wc))
+                            {
+                                int words = wc.GetInt32();
+                                this.DispatcherQueue.TryEnqueue(() => {
+                                    WordCountText.Text = $"{words} words";
+                                    if (isEditMode)
+                                    {
+                                        hasUnsavedChanges = currentMarkdown != savedMarkdown;
+                                        UpdateTitleForMode();
+                                    }
+                                });
+                            }
+                        }
+                        else if (type == "CONTENT_RESPONSE")
+                        {
+                            if (root.TryGetProperty("content", out var content))
+                                currentMarkdown = content.GetString() ?? "";
+                        }
+                        else if (type == "LOG")
+                        {
+                            if (root.TryGetProperty("message", out var logMsg))
+                                System.Diagnostics.Debug.WriteLine($"[JS] {logMsg.GetString()}");
+                        }
+                        else if (type == "SAVE_REQUEST")
+                        {
+                            this.DispatcherQueue.TryEnqueue(async () => await SaveCurrentFile());
+                        }
+                        else if (type == "EXIT_EDIT_MODE")
+                        {
+                            this.DispatcherQueue.TryEnqueue(async () => {
+                                if (isEditMode) await ExitEditMode();
+                            });
+                        }
+                    } catch { }
+                };
             } catch (Exception ex) {
                 System.Diagnostics.Debug.WriteLine($"WebView setup error: {ex}");
             }
@@ -107,7 +188,7 @@ namespace KoMDViewer
             if (Content is FrameworkElement root)
                 root.RequestedTheme = isDark ? ElementTheme.Dark : ElementTheme.Light;
 
-            if (!string.IsNullOrEmpty(currentMarkdown))
+            if (!isEditMode && !string.IsNullOrEmpty(currentMarkdown))
                 WebView.NavigateToString(BuildHtml(currentMarkdown));
         }
 
@@ -228,7 +309,7 @@ body {
     font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo', sans-serif;
     line-height: 1.8;
     background: transparent;
-    max-width: 860px;
+    max-width: 100%;
     margin: 0 auto;
     padding: 32px 40px;
 }
@@ -412,11 +493,32 @@ hr { border-top: 1px solid #444c56; }
         private async System.Threading.Tasks.Task LoadMarkdownFile(string filePath)
         {
             try {
+                if (!File.Exists(filePath))
+                {
+                    var dialog = new ContentDialog
+                    {
+                        Title = "ファイルが見つかりません",
+                        Content = $"以下のファイルが存在しません。移動または削除された可能性があります。\n\n{filePath}",
+                        CloseButtonText = "OK",
+                        XamlRoot = this.Content.XamlRoot,
+                    };
+                    await dialog.ShowAsync();
+
+                    // 履歴から削除して更新
+                    var recentFiles = LoadRecentFiles();
+                    recentFiles.Remove(filePath);
+                    SaveRecentFiles(recentFiles);
+                    RefreshRecentFilesMenu();
+                    return;
+                }
+
                 LoadingBar.Visibility = Visibility.Visible;
                 await System.Threading.Tasks.Task.Delay(30);
 
                 currentMarkdown = await File.ReadAllTextAsync(filePath);
                 currentFilePath = filePath;
+                savedMarkdown = currentMarkdown;
+                hasUnsavedChanges = false;
 
                 string html = BuildHtml(currentMarkdown);
 
@@ -440,11 +542,154 @@ hr { border-top: 1px solid #444c56; }
                 WordCountText.Text = $"{words} words";
 
                 AddToRecentFiles(filePath);
+                EditModeItem.IsEnabled = true;
             } catch (Exception ex) {
                 System.Diagnostics.Debug.WriteLine($"LoadMarkdownFile error: {ex}");
             } finally {
                 LoadingBar.Visibility = Visibility.Collapsed;
             }
+        }
+        // ===== Edit Mode =====
+
+        private async void ToggleEditMode_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(currentFilePath)) return;
+
+            if (!isEditMode)
+            {
+                await EnterEditMode();
+            }
+            else
+            {
+                await ExitEditMode();
+            }
+        }
+
+        private async System.Threading.Tasks.Task EnterEditMode()
+        {
+            isEditMode = true;
+            EditModeItem.Text = "表示モードに戻る (Esc)";
+            SaveMenuItem.IsEnabled = true;
+
+            // Navigate to CodeMirror editor
+            var navTcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
+            void navHandler(WebView2 s, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs a)
+            {
+                WebView.NavigationCompleted -= navHandler;
+                navTcs.TrySetResult(true);
+            }
+            WebView.NavigationCompleted += navHandler;
+            WebView.Source = new Uri("https://editor.local/index.html");
+            await navTcs.Task;
+
+            // Wait for editor to initialize, then send raw markdown
+            await System.Threading.Tasks.Task.Delay(300);
+            var msg = JsonSerializer.Serialize(new { type = "SET_CONTENT", content = currentMarkdown, dark = isDark });
+            WebView.CoreWebView2.PostWebMessageAsJson(msg);
+
+            UpdateTitleForMode();
+        }
+
+        private async System.Threading.Tasks.Task ExitEditMode()
+        {
+            // Get latest content directly from CodeMirror
+            await SyncContentFromEditor();
+
+            isEditMode = false;
+            EditModeItem.Text = "編集モード";
+            SaveMenuItem.IsEnabled = false;
+
+            // Switch back to Markdig view
+            WebView.NavigateToString(BuildHtml(currentMarkdown));
+            UpdateTitleForMode();
+        }
+
+        private async System.Threading.Tasks.Task SyncContentFromEditor()
+        {
+            try {
+                string result = await WebView.CoreWebView2.ExecuteScriptAsync("window.__komdGetContent()");
+                // Result is a JSON-encoded string
+                string content = System.Text.Json.JsonSerializer.Deserialize<string>(result) ?? "";
+                if (!string.IsNullOrEmpty(content))
+                    currentMarkdown = content;
+            } catch { }
+        }
+
+        private void UpdateTitleForMode()
+        {
+            string fileName = Path.GetFileName(currentFilePath);
+            string unsaved = hasUnsavedChanges ? "● " : "";
+            string mode = isEditMode ? " [編集]" : "";
+            this.Title = $"{unsaved}{fileName}{mode} - KoMDViewer";
+            TitleText.Text = $"{unsaved}{fileName}{mode} - KoMDViewer";
+        }
+
+        // ===== Save =====
+
+        private async void SaveFile_Click(object sender, RoutedEventArgs e)
+        {
+            await SaveCurrentFile();
+        }
+
+        private async System.Threading.Tasks.Task SaveCurrentFile()
+        {
+            if (string.IsNullOrEmpty(currentFilePath) || !isEditMode) return;
+
+            try {
+                await SyncContentFromEditor();
+                await File.WriteAllTextAsync(currentFilePath, currentMarkdown);
+                savedMarkdown = currentMarkdown;
+                hasUnsavedChanges = false;
+                UpdateTitleForMode();
+            } catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"Save error: {ex}");
+            }
+        }
+
+        // ===== About =====
+
+        private async void About_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "KoMDViewer",
+                CloseButtonText = "閉じる",
+                XamlRoot = this.Content.XamlRoot,
+                Content = new ScrollViewer
+                {
+                    MaxHeight = 400,
+                    Content = new TextBlock
+                    {
+                        Text = "KoMDViewer v1.0.0\n" +
+                               "Markdown Viewer & Editor\n\n" +
+                               "━━━ 使用ライブラリ ━━━\n\n" +
+                               "■ Markdig v0.40.0\n" +
+                               "  License: BSD-2-Clause\n" +
+                               "  Copyright (c) Alexandre Mutel\n" +
+                               "  https://github.com/xoofx/markdig\n\n" +
+                               "■ CodeMirror 6\n" +
+                               "  License: MIT\n" +
+                               "  Copyright (c) Marijn Haverbeke and others\n" +
+                               "  https://codemirror.net/\n\n" +
+                               "■ highlight.js v11.11.1\n" +
+                               "  License: BSD-3-Clause\n" +
+                               "  Copyright (c) Ivan Sagalaev\n" +
+                               "  https://highlightjs.org/\n\n" +
+                               "■ Microsoft.Web.WebView2\n" +
+                               "  License: Microsoft Software License\n" +
+                               "  https://www.nuget.org/packages/Microsoft.Web.WebView2\n\n" +
+                               "■ Microsoft.WindowsAppSDK\n" +
+                               "  License: Microsoft Software License\n" +
+                               "  https://www.nuget.org/packages/Microsoft.WindowsAppSDK",
+                        TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                        IsTextSelectionEnabled = true,
+                        FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe UI"),
+                        FontSize = 13,
+                        LineHeight = 20,
+                    }
+                }
+            };
+            await dialog.ShowAsync();
         }
     }
 }

@@ -1,0 +1,61 @@
+:root {
+  --background-color: rgba(255, 255, 255, 0.7);
+  --text-color: #2c3e50;
+  --header-color: #2c3e50;
+  --accent-color: #3498db;
+}
+
+body {
+  background-color: transparent;
+  color: var(--text-color);
+  font-family: 'Segoe UI', 'San Francisco', 'Helvetica Neue', sans-serif;
+  line-height: 1.7;
+  padding: 0;
+  margin: 0;
+}
+
+#app {
+  background-color: var(--background-color);
+  min-height: 100vh;
+  backdrop-filter: blur(10px);
+}
+
+.milkdown {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px;
+}
+
+.milkdown .editor {
+  outline: none;
+}
+
+/* Typora-like Header Styles */
+h1 {
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+h2 {
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+/* Code blocks */
+pre {
+  background: #f8f8f8;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+/* Math blocks */
+.katex-display {
+  margin: 1em 0;
+}
+
+/* Hide some milkdown default UI if necessary */
+.milkdown-menu {
+  display: none !important;
+  /* Typora is minimal */
+}

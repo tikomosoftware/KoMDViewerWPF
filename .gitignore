@@ -4,5 +4,8 @@ obj/
 .agent/
 frontend/node_modules/
 frontend/dist/
+editor/node_modules/
 *.user
 debug_log.txt
+session-log/
+dist/

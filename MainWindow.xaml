@@ -18,10 +18,17 @@
             <StackPanel>
                 <!-- Custom Title Bar -->
                 <Grid x:Name="AppTitleBar" Height="36">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Image x:Name="TitleBarIcon" Width="20" Height="20"
+                           Margin="12,0,0,0" VerticalAlignment="Center" Grid.Column="0"/>
                     <TextBlock x:Name="TitleText" Text="KoMDViewer"
-                               VerticalAlignment="Center" Margin="48,0,0,0"
+                               VerticalAlignment="Center" Margin="8,0,0,0"
                                FontSize="12" FontFamily="Segoe UI"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Grid.Column="1"/>
                 </Grid>
 
                 <!-- Menu Bar -->
@@ -34,6 +41,11 @@
                         </MenuFlyoutItem>
                         <MenuFlyoutSubItem x:Name="RecentFilesMenu" Text="最近のファイル"/>
                         <MenuFlyoutSeparator/>
+                        <MenuFlyoutItem x:Name="SaveMenuItem" Text="保存" Click="SaveFile_Click" IsEnabled="False">
+                            <MenuFlyoutItem.KeyboardAccelerators>
+                                <KeyboardAccelerator Modifiers="Control" Key="S"/>
+                            </MenuFlyoutItem.KeyboardAccelerators>
+                        </MenuFlyoutItem>
                         <MenuFlyoutItem Text="PDFに出力..." Click="ExportPdf_Click">
                             <MenuFlyoutItem.KeyboardAccelerators>
                                 <KeyboardAccelerator Modifiers="Control,Shift" Key="E"/>
@@ -42,6 +54,15 @@
                     </MenuBarItem>
                     <MenuBarItem Title="表示">
                         <MenuFlyoutItem x:Name="ThemeToggleItem" Text="ダークモード" Click="ToggleTheme_Click"/>
+                        <MenuFlyoutSeparator/>
+                        <MenuFlyoutItem x:Name="EditModeItem" Text="編集モード" Click="ToggleEditMode_Click" IsEnabled="False">
+                            <MenuFlyoutItem.KeyboardAccelerators>
+                                <KeyboardAccelerator Key="F2"/>
+                            </MenuFlyoutItem.KeyboardAccelerators>
+                        </MenuFlyoutItem>
+                    </MenuBarItem>
+                    <MenuBarItem Title="ヘルプ">
+                        <MenuFlyoutItem Text="バージョン情報..." Click="About_Click"/>
                     </MenuBarItem>
                 </MenuBar>
             </StackPanel>
