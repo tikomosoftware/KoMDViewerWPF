@@ -15,15 +15,24 @@
 
 ## 📥 インストール・使用方法
 
-### 📦 パッケージ内容
-本パッケージは **.NET同梱版（自己完結型）** です。
-.NETランタイムを内蔵しており、インストール不要でどこでも実行可能です。
+### 必要なランタイム
 
-- **必要環境**: なし（追加のインストールは一切不要）
-- **メリット**: ランタイムの有無を気にせず、ダブルクリックするだけで確実に起動します。
+KoMDViewerの実行には、以下の2つのランタイムが必要です。初回のみインストールしてください。
+
+#### 1. .NET 9.0 Desktop Runtime
+1. [.NET 9.0 ダウンロードページ](https://dotnet.microsoft.com/download/dotnet/9.0) を開く
+2. 「.NET Desktop Runtime 9.0.x」の **Windows x64** インストーラーをダウンロード
+3. ダウンロードしたインストーラーを実行
+
+#### 2. Windows App SDK Runtime
+1. [Windows App SDK ダウンロードページ](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads) を開く
+2. 最新の安定版リリースから **Runtime** のダウンロードリンクをクリック
+3. ダウンロードしたインストーラーを実行
+
+> 💡 どちらも一度インストールすれば、以降のアップデートでは再インストール不要です。
 
 ### インストール手順
-1. ダウンロードしたZIPファイルを展開
+1. ダウンロードしたZIPファイルを任意のフォルダに展開
 2. `KoMDViewer.exe` を実行
 
 ## 🚀 使い方
@@ -76,7 +85,10 @@
 ## 🔧 トラブルシューティング
 
 ### アプリが起動しない
-- WebView2 Runtimeがインストールされているか確認してください
+- **ランタイムが未インストール**: .NET 9.0 Desktop Runtime と Windows App SDK Runtime の両方がインストールされているか確認してください。どちらかが欠けていると、exeをダブルクリックしても何も起こらずサイレントにクラッシュします
+  - [.NET 9.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)
+  - [Windows App SDK Runtime](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
+- **WebView2 Runtime**: Windows 10の場合、Microsoft Edge WebView2 Runtimeが必要です
 - Windows 10 version 1809 以降が必要です
 
 ### Markdownが表示されない
