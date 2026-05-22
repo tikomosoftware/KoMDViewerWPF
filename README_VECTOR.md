@@ -1,4 +1,4 @@
-# KoMDViewer v1.0
+# KoMDViewer v1.1
 
 📝 軽量で美しいMarkdownビューアー＆エディター
 
@@ -19,21 +19,24 @@
 
 KoMDViewerの実行には、以下の2つのランタイムが必要です。初回のみインストールしてください。
 
+> 💡 ZIPに同梱の `install-runtime.bat` を実行すると自動でインストールできます。
+
 #### 1. .NET 9.0 Desktop Runtime
 1. [.NET 9.0 ダウンロードページ](https://dotnet.microsoft.com/download/dotnet/9.0) を開く
 2. 「.NET Desktop Runtime 9.0.x」の **Windows x64** インストーラーをダウンロード
 3. ダウンロードしたインストーラーを実行
 
-#### 2. Windows App SDK Runtime
+#### 2. Windows App SDK Runtime 2.x以上
 1. [Windows App SDK ダウンロードページ](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads) を開く
-2. 最新の安定版リリースから **Runtime** のダウンロードリンクをクリック
+2. **バージョン 2.x** の安定版リリースから **Runtime** のダウンロードリンクをクリック
 3. ダウンロードしたインストーラーを実行
 
-> 💡 どちらも一度インストールすれば、以降のアップデートでは再インストール不要です。
+> ⚠️ バージョンが古い場合、起動時にエラーダイアログが表示されます。その場合は最新版を再インストールしてください。
 
 ### インストール手順
 1. ダウンロードしたZIPファイルを任意のフォルダに展開
-2. `KoMDViewer.exe` を実行
+2. **初回のみ** `install-runtime.bat` を実行してランタイムをインストール
+3. `KoMDViewer.exe` を実行
 
 ## 🚀 使い方
 
@@ -85,9 +88,9 @@ KoMDViewerの実行には、以下の2つのランタイムが必要です。初
 ## 🔧 トラブルシューティング
 
 ### アプリが起動しない
-- **ランタイムが未インストール**: .NET 9.0 Desktop Runtime と Windows App SDK Runtime の両方がインストールされているか確認してください。どちらかが欠けていると、exeをダブルクリックしても何も起こらずサイレントにクラッシュします
+- **ランタイムが未インストール**: .NET 9.0 Desktop Runtime と Windows App SDK Runtime 2.x以上 の両方がインストールされているか確認してください。どちらかが欠けていると、exeをダブルクリックしても何も起こらずサイレントにクラッシュします
   - [.NET 9.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)
-  - [Windows App SDK Runtime](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
+  - [Windows App SDK Runtime 2.x以上](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
 - **WebView2 Runtime**: Windows 10の場合、Microsoft Edge WebView2 Runtimeが必要です
 - Windows 10 version 1809 以降が必要です
 
@@ -104,6 +107,11 @@ KoMDViewerの実行には、以下の2つのランタイムが必要です。初
 - **HP**: https://tikomosoftware.github.io
 
 ## 📋 更新履歴
+
+### v1.1 (2026-05-22)
+- Windows App SDK を 1.6 → 2.1.3（最新安定版）に更新
+- `install-runtime.bat` を同梱（ランタイムのインストールを自動化）
+- ビルドスクリプトにランタイムインストーラー同梱処理を追加
 
 ### v1.0 (2026-04-18)
 - 初回リリース

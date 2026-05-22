@@ -5,7 +5,7 @@
 # dotnet build の出力をそのままパッケージングする方式を採用しています。
 
 param(
-    [string]$Version = "1.0",
+    [string]$Version = "1.1",
     [switch]$Clean
 )
 
@@ -84,6 +84,13 @@ try {
     Get-ChildItem -Path $BuildOutputDir -Directory | Copy-Item -Destination $TempReleaseDir -Recurse
 
     Copy-Item "README.md" $TempReleaseDir
+
+    # install-runtime.bat を同梱
+    if (Test-Path "install-runtime.bat") {
+        Copy-Item "install-runtime.bat" $TempReleaseDir
+        Write-Host "  ✓ install-runtime.bat included" -ForegroundColor DarkGreen
+    }
+
     Start-Sleep -Seconds 2
 
     New-ZipFromDirectory -SourceDir $TempReleaseDir -DestinationZip $ReleaseZipFile

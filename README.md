@@ -1,8 +1,8 @@
-# KoMDViewer v1.0
+# KoMDViewer v1.1
 
 📝 軽量で美しいMarkdownビューアー＆エディター
 
-![KoMDViewer](https://img.shields.io/badge/Platform-Windows-blue) ![.NET](https://img.shields.io/badge/.NET-9.0-purple) ![License](https://img.shields.io/badge/License-MIT-green) ![Version](https://img.shields.io/badge/Version-1.0-orange)
+![KoMDViewer](https://img.shields.io/badge/Platform-Windows-blue) ![.NET](https://img.shields.io/badge/.NET-9.0-purple) ![License](https://img.shields.io/badge/License-MIT-green) ![Version](https://img.shields.io/badge/Version-1.1-orange)
 
 ## 🎯 特徴
 
@@ -20,7 +20,7 @@
 ### システム要件
 - **OS**: Windows 10 version 1809 以降 / Windows 11
 - **[.NET 9.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)**: 必須
-- **[Windows App SDK Runtime](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)**: 必須（未インストールの場合、exeが無反応でクラッシュします）
+- **[Windows App SDK Runtime 2.x以上](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)**: 必須（MSIXパッケージバージョン 6000.318.2304.0 以上）。未インストールの場合、起動時にエラーダイアログが表示されるか、exeが無反応でクラッシュします
 - **WebView2 Runtime**: Microsoft Edge WebView2（Windows 11は標準搭載、Windows 10は自動インストール）
 
 ### ランタイムのインストール手順
@@ -32,17 +32,20 @@ KoMDViewerを初めて使う場合、以下の2つのランタイムを事前に
 2. 「.NET Desktop Runtime 9.0.x」の **Windows x64** インストーラーをダウンロード
 3. ダウンロードしたインストーラーを実行
 
-#### 2. Windows App SDK Runtime
+#### 2. Windows App SDK Runtime 2.x以上
 1. [Windows App SDK ダウンロードページ](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads) を開く
-2. 最新の安定版リリースから **Runtime** のダウンロードリンクをクリック（「Downloads for the Windows App SDK」セクション内）
+2. **バージョン 2.x** の安定版リリースから **Runtime** のダウンロードリンクをクリック（「Downloads for the Windows App SDK」セクション内）
 3. ダウンロードしたインストーラーを実行
+
+> ⚠️ バージョンが古い（2.x未満）場合、起動時に「This application requires the Windows App Runtime Version 1.6」というエラーが表示されます。その場合は最新版を再インストールしてください。
 
 > 💡 どちらも一度インストールすれば、以降のアップデートでは再インストール不要です。
 
 ### インストール手順
 1. [Releases](../../releases)から `KoMDViewer-v*-release.zip` をダウンロード
 2. ZIPファイルを任意のフォルダに展開
-3. `KoMDViewer.exe` を実行
+3. **初回のみ** `install-runtime.bat` を実行してランタイムをインストール
+4. `KoMDViewer.exe` を実行
 
 ## 🚀 使い方
 
@@ -99,9 +102,10 @@ KoMDViewerを初めて使う場合、以下の2つのランタイムを事前に
 ## 🔧 トラブルシューティング
 
 ### アプリが起動しない
-- **ランタイムが未インストール**: .NET 9.0 Desktop Runtime と Windows App SDK Runtime の両方がインストールされているか確認してください。どちらかが欠けていると、exeをダブルクリックしても何も起こらずサイレントにクラッシュします
+- **ランタイムが未インストール**: .NET 9.0 Desktop Runtime と Windows App SDK Runtime 2.x以上 の両方がインストールされているか確認してください。どちらかが欠けていると、exeをダブルクリックしても何も起こらずサイレントにクラッシュします
   - [.NET 9.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)
-  - [Windows App SDK Runtime](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
+  - [Windows App SDK Runtime 2.x以上](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
+- **「This application requires the Windows App Runtime Version 1.6」エラーが出る**: Windows App SDK Runtime のバージョンが古いか未インストールです。上記リンクから最新版をインストールしてください
 - **WebView2 Runtime**: Windows 10の場合、Microsoft Edge WebView2 Runtimeが必要です
 
 ### Markdownが表示されない
@@ -159,7 +163,7 @@ WinUI 3 の非パッケージアプリ（`WindowsPackageType=None`）では、`d
 - **CodeMirror 6** — テキストエディター（MIT）
 - **highlight.js** v11.11.1 — シンタックスハイライト（BSD-3-Clause）
 - **Microsoft.Web.WebView2** — Webコンテンツ表示
-- **Microsoft.WindowsAppSDK** — WinUI 3フレームワーク
+- **Microsoft.WindowsAppSDK** v2.1.3 — WinUI 3フレームワーク
 
 ## 📞 サポート
 
@@ -167,6 +171,11 @@ WinUI 3 の非パッケージアプリ（`WindowsPackageType=None`）では、`d
 - **HP**: https://tikomosoftware.github.io
 
 ## 📋 更新履歴
+
+### v1.1 (2026-05-22)
+- Windows App SDK を 1.6 → 2.1.3（最新安定版）に更新
+- `install-runtime.bat` を同梱（ランタイムのインストールを自動化）
+- ビルドスクリプトにランタイムインストーラー同梱処理を追加
 
 ### v1.0 (2026-04-18)
 - 初回リリース
