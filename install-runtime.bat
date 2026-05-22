@@ -15,7 +15,7 @@ if %errorlevel% == 0 (
 ) else (
     echo       未インストールです。ダウンロードしてインストールします...
     echo.
-    powershell -Command "& { $url = 'https://dotnet.microsoft.com/download/dotnet/thank-you/runtime-desktop-9.0-windows-x64-installer'; Start-Process $url }"
+    powershell -Command "Start-Process 'https://dotnet.microsoft.com/download/dotnet/thank-you/runtime-desktop-9.0-windows-x64-installer'"
     echo       ブラウザが開きました。インストーラーをダウンロードして実行してください。
     echo       インストール完了後、Enterキーを押して続行してください。
     pause > nul
@@ -23,10 +23,20 @@ if %errorlevel% == 0 (
 
 echo.
 
-:: --- Windows App Runtime チェック ---
-echo [2/2] Windows App Runtime を確認中...
-powershell -Command "& { $pkg = Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.2*' -ErrorAction SilentlyContinue; if ($pkg) { Write-Host '       既にインストール済みです。スキップします。'; exit 0 } else { exit 1 } }"
-if %errorlevel% == 0 (
+:: --- Windows App Runtime 2.x チェック ---
+echo [2/2] Windows App Runtime 2.x を確認中...
+
+:: PowerShell でチェック結果をファイルに書き出す方式（exitcode問題を回避）
+set TMPCHECK=%TEMP%\waruntime_check.txt
+powershell -Command "if (Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.2*' -ErrorAction SilentlyContinue) { 'FOUND' | Out-File '%TMPCHECK%' } else { 'NOTFOUND' | Out-File '%TMPCHECK%' }"
+
+set /p WACHECK=<%TMPCHECK%
+del "%TMPCHECK%" 2>nul
+
+echo       検出結果: %WACHECK%
+
+if "%WACHECK%"=="FOUND" (
+    echo       既にインストール済みです。スキップします。
     goto runtime_done
 )
 
@@ -40,9 +50,21 @@ if exist "%~dp0WindowsAppRuntimeInstall.exe" (
     goto runtime_done
 )
 
-:: なければ Web からダウンロード
+:: なければ Web からダウンロードしてインストール
 echo       インストーラーをダウンロード中...
-powershell -Command "& { try { $url = 'https://aka.ms/windowsappruntimeinstall-x64'; $out = '%TEMP%\WindowsAppRuntimeInstall.exe'; Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing; Start-Process $out -Wait; Write-Host '       インストール完了。' } catch { Write-Host ('       ダウンロード失敗: ' + $_.Exception.Message) } }"
+set TMPINST=%TEMP%\WindowsAppRuntimeInstall.exe
+powershell -Command "Invoke-WebRequest -Uri 'https://aka.ms/windowsappruntimeinstall-x64' -OutFile '%TMPINST%' -UseBasicParsing"
+if exist "%TMPINST%" (
+    echo       ダウンロード完了。インストールを開始します...
+    "%TMPINST%"
+    del "%TMPINST%" 2>nul
+) else (
+    echo       ダウンロードに失敗しました。
+    echo       手動でインストールしてください:
+    echo       https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads
+    pause
+    goto end
+)
 
 :runtime_done
 echo.
@@ -52,4 +74,6 @@ echo ============================================
 echo.
 echo KoMDViewer.exe を起動できます。
 echo.
+
+:end
 pause
