@@ -2,7 +2,24 @@
 
 📝 軽量で美しいMarkdownビューアー＆エディター
 
-![KoMDViewer](https://img.shields.io/badge/Platform-Windows-blue) ![.NET](https://img.shields.io/badge/.NET-9.0-purple) ![License](https://img.shields.io/badge/License-MIT-green) ![Version](https://img.shields.io/badge/Version-1.1-orange)
+![KoMDViewer](https://img.shields.io/badge/Platform-Windows-blue) ![.NET](https://img.shields.io/badge/.NET-9.0-purple) ![License](https://img.shields.io/badge/License-MIT-green) ![Version](https://img.shields.io/badge/Version-1.1-orange) ![Status](https://img.shields.io/badge/Status-動作不安定-red)
+
+> [!WARNING]
+> ## ⚠️ 現在 v1.1 は動作しない可能性が高いです（2026-05-22 時点）
+>
+> Windows App SDK を 1.6 → 2.0.1 にアップデートしましたが、起動時に `Microsoft.UI.Xaml.dll` でクラッシュ（例外コード `0xc000027b` STATUS_FAIL_FAST_EXCEPTION）する問題が発生しています。
+>
+> **現在の状況：**
+> - **v1.0**（Windows App SDK 1.6）— 正常動作するが SDK が1年以上前のもの
+> - **v1.1**（Windows App SDK 2.0.1）— ビルドは通るが起動時にクラッシュ
+>
+> **原因：** SDK 2.0 への移行で発生する `Microsoft.UI.Xaml` 関連の互換性問題。原因調査中です。
+>
+> **今後の方針（検討中）：**
+> 1. WinUI 3 のまま SDK 2.0 への対応を本格的に進める
+> 2. **WPF への移行**（このアプリは Markdown を WebView2 で表示するだけなので、WinUI 3 のメリットがほぼ活きていない）
+>
+> 今しばらくは v1.0 をご利用ください。詳細な経緯は [この記事](https://zenn.dev/) にまとめています。
 
 ## 🎯 特徴
 
@@ -163,7 +180,7 @@ WinUI 3 の非パッケージアプリ（`WindowsPackageType=None`）では、`d
 - **CodeMirror 6** — テキストエディター（MIT）
 - **highlight.js** v11.11.1 — シンタックスハイライト（BSD-3-Clause）
 - **Microsoft.Web.WebView2** — Webコンテンツ表示
-- **Microsoft.WindowsAppSDK** v2.1.3 — WinUI 3フレームワーク
+- **Microsoft.WindowsAppSDK** v2.0.1 — WinUI 3フレームワーク
 
 ## 📞 サポート
 
@@ -172,10 +189,11 @@ WinUI 3 の非パッケージアプリ（`WindowsPackageType=None`）では、`d
 
 ## 📋 更新履歴
 
-### v1.1 (2026-05-22)
-- Windows App SDK を 1.6 → 2.1.3（最新安定版）に更新
-- `install-runtime.bat` を同梱（ランタイムのインストールを自動化）
+### v1.1 (2026-05-22) ⚠️ 動作不安定
+- Windows App SDK を 1.6 → 2.0.1 に更新
+- `install-runtime.bat` / `install-runtime.ps1` を同梱（ランタイムのインストールを自動化）
 - ビルドスクリプトにランタイムインストーラー同梱処理を追加
+- **既知の問題**: 起動時に `Microsoft.UI.Xaml.dll` でクラッシュする問題が発生中。原因調査中
 
 ### v1.0 (2026-04-18)
 - 初回リリース

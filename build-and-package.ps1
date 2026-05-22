@@ -71,7 +71,7 @@ $releaseBuildSuccess = $false
 try {
     New-Item -ItemType Directory -Path $TempReleaseDir -Force | Out-Null
 
-    # build出力からコピー（.NETランタイムDLLとデバッグファイルは除外）
+    # build出力からコピー（.NETランタイムDLL本体とデバッグファイルのみ除外）
     Get-ChildItem -Path $BuildOutputDir -File | Where-Object {
         $_.Name -notmatch "^(coreclr|clr|hostfxr|hostpolicy|createdump|mscor|msquic)" -and
         $_.Name -notmatch "^System\." -and
@@ -79,6 +79,10 @@ try {
         $_.Name -notmatch "^(netstandard|WindowsBase)\." -and
         $_.Extension -ne ".pdb"
     } | Copy-Item -Destination $TempReleaseDir
+
+    # Microsoft.UI.Xaml.dll はシステムのWindowsAppRuntimeから読み込まれるため除外
+    # （同梱するとシステムDLLと競合してクラッシュする）
+    Remove-Item "$TempReleaseDir\Microsoft.UI.Xaml.dll" -ErrorAction SilentlyContinue
 
     # サブフォルダ（editor, Resources）をコピー
     Get-ChildItem -Path $BuildOutputDir -Directory | Copy-Item -Destination $TempReleaseDir -Recurse
