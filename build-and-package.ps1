@@ -85,10 +85,12 @@ try {
 
     Copy-Item "README.md" $TempReleaseDir
 
-    # install-runtime.bat を同梱
-    if (Test-Path "install-runtime.bat") {
-        Copy-Item "install-runtime.bat" $TempReleaseDir
-        Write-Host "  ✓ install-runtime.bat included" -ForegroundColor DarkGreen
+    # install-runtime.bat / .ps1 を同梱
+    foreach ($f in @("install-runtime.bat", "install-runtime.ps1")) {
+        if (Test-Path $f) {
+            Copy-Item $f $TempReleaseDir
+            Write-Host "  ✓ $f included" -ForegroundColor DarkGreen
+        }
     }
 
     Start-Sleep -Seconds 2
