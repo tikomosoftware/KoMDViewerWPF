@@ -35,7 +35,7 @@ jobs:
         .\build-and-package.ps1 -Version "${{ steps.get_version.outputs.VERSION }}"
     
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: |
           dist/KoMDViewer-v${{ steps.get_version.outputs.VERSION }}-release.zip
@@ -47,8 +47,10 @@ jobs:
           
           **通常版 (KoMDViewer-v${{ steps.get_version.outputs.VERSION }}-release.zip):**
           - 一般的な配布用パッケージです。
-          - 必要環境: .NET 9.0 Desktop Runtime, Windows App SDK Runtime
+          - ZIPに同梱の `install-runtime.bat` を初回のみ実行してください（ランタイムを自動インストールします）。
+          - 必要環境: .NET 9.0 Desktop Runtime, Windows App SDK Runtime 2.x以上
           - [.NET 9.0 Runtimeをダウンロード](https://dotnet.microsoft.com/download/dotnet/9.0)
+          - [Windows App SDK Runtimeをダウンロード](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
           
           **Vector用 (KoMDViewer-v${{ steps.get_version.outputs.VERSION }}-vector.zip):**
           - Vector等のソフトウェア配布サイト向けのパッケージです（READMEがVector用になっています）。
