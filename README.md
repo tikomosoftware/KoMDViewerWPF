@@ -1,211 +1,90 @@
-# KoMDViewer v1.1
+# KoMDViewer WPF
 
-📝 軽量で美しいMarkdownビューアー＆エディター
+Windows向けのシンプルなMarkdownビューアです。WPF、Markdig、WebView2で構成されています。
 
-![KoMDViewer](https://img.shields.io/badge/Platform-Windows-blue) ![.NET](https://img.shields.io/badge/.NET-9.0-purple) ![License](https://img.shields.io/badge/License-MIT-green) ![Version](https://img.shields.io/badge/Version-1.1-orange) ![Status](https://img.shields.io/badge/Status-動作不安定-red)
+![Platform](https://img.shields.io/badge/Platform-Windows-blue)
+![.NET](https://img.shields.io/badge/.NET-9.0-purple)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-> [!WARNING]
-> ## ⚠️ 現在 v1.1 は動作しない可能性が高いです（2026-05-22 時点）
->
-> Windows App SDK を 1.6 → 2.0.1 にアップデートしましたが、起動時に `Microsoft.UI.Xaml.dll` でクラッシュ（例外コード `0xc000027b` STATUS_FAIL_FAST_EXCEPTION）する問題が発生しています。
->
-> **現在の状況：**
-> - **v1.0**（Windows App SDK 1.6）— 正常動作するが SDK が1年以上前のもの
-> - **v1.1**（Windows App SDK 2.0.1）— ビルドは通るが起動時にクラッシュ
->
-> **原因：** SDK 2.0 への移行で発生する `Microsoft.UI.Xaml` 関連の互換性問題。原因調査中です。
->
-> **今後の方針（検討中）：**
-> 1. WinUI 3 のまま SDK 2.0 への対応を本格的に進める
-> 2. **WPF への移行**（このアプリは Markdown を WebView2 で表示するだけなので、WinUI 3 のメリットがほぼ活きていない）
->
-> 今しばらくは v1.0 をご利用ください。詳細な経緯は [この記事](https://zenn.dev/) にまとめています。
+## Features
 
-## 🎯 特徴
+- Markdown / text file viewer
+- Left history pane
+- Recent-file removal from the history context menu
+- Recent-file sorting by file name
+- Drag and drop support
+- Light / dark preview theme
+- Command-line file open
 
-- **モダンUI**: WinUI 3 + Mica背景による洗練されたデザイン
-- **高品質レンダリング**: Markdig + highlight.js によるシンタックスハイライト対応
-- **編集モード**: CodeMirror 6 ベースのMarkdownエディター内蔵
-- **PDF出力**: 表示中のMarkdownをPDFにエクスポート
-- **テーマ切り替え**: ライト・ダークテーマ対応
-- **ドラッグ&ドロップ**: ファイルをウィンドウにドロップして開ける
-- **最近のファイル**: 最近開いたファイルの履歴管理
-- **コマンドライン対応**: ファイルパスを引数に渡して直接開ける
+## Requirements
 
-## 📥 ダウンロード・インストール
+- Windows 10 version 1809 or later / Windows 11
+- [.NET 9 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)
+- [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
 
-### システム要件
-- **OS**: Windows 10 version 1809 以降 / Windows 11
-- **[.NET 9.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)**: 必須
-- **[Windows App SDK Runtime 2.x以上](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)**: 必須（MSIXパッケージバージョン 6000.318.2304.0 以上）。未インストールの場合、起動時にエラーダイアログが表示されるか、exeが無反応でクラッシュします
-- **WebView2 Runtime**: Microsoft Edge WebView2（Windows 11は標準搭載、Windows 10は自動インストール）
+Windows 11 normally includes WebView2. On Windows 10, install it if the preview pane does not appear.
 
-### ランタイムのインストール手順
+## Install
 
-KoMDViewerを初めて使う場合、以下の2つのランタイムを事前にインストールしてください。
+1. Download `KoMDViewerWPF-v*-release.zip` from Releases.
+2. Extract the ZIP to any folder.
+3. Run `install-runtime.bat` if this is the first time using the app on the PC.
+4. Run `KoMDViewerWPF.exe`.
 
-#### 1. .NET 9.0 Desktop Runtime
-1. [.NET 9.0 ダウンロードページ](https://dotnet.microsoft.com/download/dotnet/9.0) を開く
-2. 「.NET Desktop Runtime 9.0.x」の **Windows x64** インストーラーをダウンロード
-3. ダウンロードしたインストーラーを実行
+## Usage
 
-#### 2. Windows App SDK Runtime 2.x以上
-1. [Windows App SDK ダウンロードページ](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads) を開く
-2. **バージョン 2.x** の安定版リリースから **Runtime** のダウンロードリンクをクリック（「Downloads for the Windows App SDK」セクション内）
-3. ダウンロードしたインストーラーを実行
+- Open a file: `File > Open...` or `Ctrl + O`
+- Drag and drop: drop a `.md`, `.markdown`, or `.txt` file onto the window
+- Open from command line:
 
-> ⚠️ バージョンが古い（2.x未満）場合、起動時に「This application requires the Windows App Runtime Version 1.6」というエラーが表示されます。その場合は最新版を再インストールしてください。
+```powershell
+KoMDViewerWPF.exe "C:\path\to\file.md"
+```
 
-> 💡 どちらも一度インストールすれば、以降のアップデートでは再インストール不要です。
+## Supported Files
 
-### インストール手順
-1. [Releases](../../releases)から `KoMDViewer-v*-release.zip` をダウンロード
-2. ZIPファイルを任意のフォルダに展開
-3. **初回のみ** `install-runtime.bat` を実行してランタイムをインストール
-4. `KoMDViewer.exe` を実行
+- `.md`
+- `.markdown`
+- `.mdown`
+- `.mkd`
+- `.mkdn`
+- `.txt`
 
-## 🚀 使い方
+## Development
 
-### ファイルを開く
-- **ドラッグ&ドロップ**: Markdownファイルをウィンドウにドロップ
-- **メニューから**: ファイル → 開く
-- **ショートカット**: `Ctrl + O`
-- **コマンドライン**: `KoMDViewer.exe "path/to/file.md"`
-
-### キーボードショートカット
-
-| キー | 機能 |
-|------|------|
-| `Ctrl + O` | ファイルを開く |
-| `Ctrl + S` | 保存（編集モード時） |
-| `Ctrl + Shift + E` | PDFにエクスポート |
-| `F2` | 編集モード切り替え |
-| `Esc` | 編集モード終了 |
-
-### 編集モード
-1. Markdownファイルを開いた状態で `F2` キーまたは 表示 → 編集モード
-2. CodeMirror 6 ベースのエディターでMarkdownを編集
-3. `Ctrl + S` で保存
-4. `Esc` で表示モードに戻る
-
-### PDF出力
-1. Markdownファイルを開いた状態で `Ctrl + Shift + E` またはファイル → PDFに出力
-2. 保存先を選択
-3. ライトテーマでPDFが生成される
-
-## 📁 対応ファイル形式
-
-- Markdown (`.md`, `.markdown`)
-- テキスト (`.txt`)
-- その他 (`.mdown`, `.mkd`, `.mkdn`)
-
-## ⚙️ 機能詳細
-
-### Markdownレンダリング
-- CommonMark準拠 + 拡張構文（テーブル、タスクリスト、脚注など）
-- コードブロックのシンタックスハイライト（highlight.js）
-- 数式、絵文字などの拡張機能
-
-### テーマ
-- **ライトテーマ**: GitHub風の明るいデザイン
-- **ダークテーマ**: 目に優しいダークデザイン
-- Mica背景による半透明効果
-
-### 最近のファイル
-- 最大10件の履歴を自動保存
-- 存在しないファイルは開く際にメッセージ表示＆履歴から自動削除
-- 履歴のクリア機能
-
-## 🔧 トラブルシューティング
-
-### アプリが起動しない
-- **ランタイムが未インストール**: .NET 9.0 Desktop Runtime と Windows App SDK Runtime 2.x以上 の両方がインストールされているか確認してください。どちらかが欠けていると、exeをダブルクリックしても何も起こらずサイレントにクラッシュします
-  - [.NET 9.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)
-  - [Windows App SDK Runtime 2.x以上](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)
-- **「This application requires the Windows App Runtime Version 1.6」エラーが出る**: Windows App SDK Runtime のバージョンが古いか未インストールです。上記リンクから最新版をインストールしてください
-- **WebView2 Runtime**: Windows 10の場合、Microsoft Edge WebView2 Runtimeが必要です
-
-### Markdownが表示されない
-- 対応ファイル形式であることを確認してください
-- ファイルのエンコーディングがUTF-8であることを確認してください
-
-### PDFが出力できない
-- WebView2が正常に動作しているか確認してください
-- 出力先のフォルダに書き込み権限があるか確認してください
-
-## 🛠️ 開発者向け情報
-
-### ビルド方法
-
-```bash
-# 依存関係の復元
+```powershell
 dotnet restore
-
-# デバッグビルド
 dotnet build
-
-# 実行
 dotnet run
 ```
 
-### リリースビルド
+Release package:
 
-```bash
-# ビルドスクリプトを使用
-.\build-and-package.ps1 -Version "1.0"
+```powershell
+.\build-and-package.ps1 -Version "1.1"
 ```
 
-### ビルド・配布に関する技術的な注意事項
+## Tech Stack
 
-本プロジェクトでは、ランタイム同梱の自己完結型（self-contained）配布を検討しましたが、`dotnet` CLI によるビルドでは以下の技術的制約があり、現時点ではフレームワーク依存版（framework-dependent）のみの配布としています。
+- .NET 9
+- WPF
+- Markdig
+- Microsoft Edge WebView2
+- System.Text.Json
 
-> **補足**: Windows App SDK 1.1 以降、`WindowsAppSDKSelfContained=true` による self-contained 配布は[公式にサポートされている機能](https://docs.microsoft.com/windows/apps/package-and-deploy/self-contained-deploy/deploy-self-contained-apps)です。ただし公式ドキュメントに「`dotnet publish` is not yet supported」と明記されており、**Visual Studio のビルドパイプラインが前提**となっています。VS 経由であれば self-contained 版を作成できる可能性があります。
+## Notes
 
-#### 1. dotnet publish / dotnet build --self-contained で .xbf ファイルが出力されない
+Recent files and settings are stored under:
 
-WinUI 3 の非パッケージアプリ（`WindowsPackageType=None`）では、`dotnet publish` および `dotnet build --self-contained` 実行時に XAMLコンパイル済みリソース（`.xbf` ファイル）が出力に含まれません。`.xbf` が欠落すると、exe は `0xC0000142`（DLL Initialization Failed）でサイレントにクラッシュします。
+```text
+%LocalAppData%\KoMDViewer
+```
 
-これは `EnableCoreMrtTooling` が Visual Studio の MSBuild タスク（`Microsoft.Build.Packaging.Pri.Tasks.dll`）に依存しており、`dotnet` CLI 単体では動作しないことが原因です。
+The internal namespace remains `KoMDViewer` for compatibility with the existing project structure.
 
-このため、ビルドスクリプトでは `dotnet publish` ではなく通常の `dotnet build` の出力をパッケージングし、`.xbf` ファイルが含まれるようにしています。
+## Support
 
-#### 2. WindowsAppSDKSelfContained=true で CoreMessagingXP.dll が競合する
-
-`WindowsAppSDKSelfContained=true` を指定すると、Windows App SDK のネイティブ DLL（`CoreMessagingXP.dll` 等）がアプリフォルダに同梱されます。しかし、システムに Windows App SDK Runtime がインストール済みの環境では、同梱された DLL とシステムの DLL がバージョン競合を起こし、`0xc0000602`（STATUS_FAIL_FAST_EXCEPTION）でクラッシュします。
-
-この問題はランタイム未インストールのクリーンな環境では発生しない可能性がありますが、開発マシンでの動作確認ができないため、現時点では Windows App SDK の同梱を見送っています。
-
-### 使用ライブラリ
-- **Markdig** v0.40.0 — Markdownパーサー（BSD-2-Clause）
-- **CodeMirror 6** — テキストエディター（MIT）
-- **highlight.js** v11.11.1 — シンタックスハイライト（BSD-3-Clause）
-- **Microsoft.Web.WebView2** — Webコンテンツ表示
-- **Microsoft.WindowsAppSDK** v2.0.1 — WinUI 3フレームワーク
-
-## 📞 サポート
-
-- **E-Mail**: tikomo@gmail.com
-- **HP**: https://tikomosoftware.github.io
-
-## 📋 更新履歴
-
-### v1.1 (2026-05-22) ⚠️ 動作不安定
-- Windows App SDK を 1.6 → 2.0.1 に更新
-- `install-runtime.bat` / `install-runtime.ps1` を同梱（ランタイムのインストールを自動化）
-- ビルドスクリプトにランタイムインストーラー同梱処理を追加
-- **既知の問題**: 起動時に `Microsoft.UI.Xaml.dll` でクラッシュする問題が発生中。原因調査中
-
-### v1.0 (2026-04-18)
-- 初回リリース
-- Markdownファイルの表示・編集
-- PDF出力機能
-- ライト・ダークテーマ対応
-- ドラッグ&ドロップ対応
-- 最近のファイル履歴
-- コマンドライン引数対応
-
----
-
-**KoMDViewer** - シンプルで美しいMarkdown体験を提供します 📝✨
+- E-Mail: tikomo@gmail.com
+- HP: https://tikomosoftware.github.io
 
 © 2026 tikomo software

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="tile" x1="32" y1="20" x2="224" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f2747"/>
+      <stop offset="1" stop-color="#14213d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="76" y1="76" x2="190" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="url(#tile)"/>
+  <path d="M74 42h76l42 42v130H74z" fill="#f8fafc"/>
+  <path d="M150 42v42h42z" fill="#dbeafe"/>
+  <path d="M150 42v42h42" fill="none" stroke="#94a3b8" stroke-width="4" stroke-linejoin="round"/>
+  <rect x="52" y="94" width="152" height="92" rx="18" fill="url(#accent)"/>
+  <text x="128" y="154" fill="#06111f" font-family="Segoe UI, Arial, sans-serif" font-size="54" font-weight="800" text-anchor="middle">MD</text>
+  <path d="M99 169l29 24 29-24" fill="none" stroke="#06111f" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

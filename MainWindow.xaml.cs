@@ -1,695 +1,646 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using Markdig;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Windows.ApplicationModel.DataTransfer;
-using Windows.Storage;
-using Windows.Storage.Pickers;
+using Microsoft.Win32;
 
-namespace KoMDViewer
+namespace KoMDViewer;
+
+public partial class MainWindow : Window
 {
-    public sealed partial class MainWindow : Window
+    private const string AppDisplayName = "KoMDViewer WPF";
+    private const int MaxRecentFiles = 10;
+
+    private static readonly string[] MarkdownExtensions =
+    [
+        ".md",
+        ".markdown",
+        ".mdown",
+        ".mkd",
+        ".mkdn",
+        ".txt"
+    ];
+
+    private static readonly string AppDataDirectory = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "KoMDViewer");
+
+    private static readonly string WebViewDataDirectory = Path.Combine(AppDataDirectory, "WebView2");
+
+    private static readonly string RecentFilesPath = Path.Combine(AppDataDirectory, "recent.json");
+    private static readonly string SettingsPath = Path.Combine(AppDataDirectory, "settings.json");
+    private readonly MarkdownPipeline markdownPipeline;
+    private string currentFilePath = string.Empty;
+    private bool isRefreshingRecentFiles;
+    private bool sortRecentFilesAlphabetically;
+    private GridLength historyPaneWidth = new(260);
+
+    public MainWindow()
     {
-        private string currentFilePath = "";
-        private string currentMarkdown = "";
-        private string savedMarkdown = "";  // last saved content
-        private bool isDark;
-        private bool isEditMode;
-        private bool hasUnsavedChanges;
-        private readonly MarkdownPipeline mdPipeline;
+        InitializeComponent();
 
-        private static readonly string[] MarkdownExtensions =
-            { ".md", ".markdown", ".mdown", ".mkd", ".mkdn", ".txt" };
+        markdownPipeline = new MarkdownPipelineBuilder()
+            .UseAdvancedExtensions()
+            .Build();
 
-        private static readonly string RecentFilesPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "KoMDViewer", "recent.json");
-
-        private const int MaxRecentFiles = 10;
-
-        public MainWindow()
+        MarkdownView.CreationProperties = new Microsoft.Web.WebView2.Wpf.CoreWebView2CreationProperties
         {
-            this.InitializeComponent();
-            this.Title = "KoMDViewer";
+            UserDataFolder = WebViewDataDirectory
+        };
+        MarkdownView.AllowExternalDrop = false;
 
-            mdPipeline = new MarkdownPipelineBuilder()
-                .UseAdvancedExtensions()
-                .Build();
+        CommandBindings.Add(new CommandBinding(ApplicationCommands.Open, OpenFileCommand_Executed));
+        InputBindings.Add(new KeyBinding(ApplicationCommands.Open, Key.O, ModifierKeys.Control));
 
-            isDark = Application.Current.RequestedTheme == ApplicationTheme.Dark;
-            UpdateThemeMenuText();
+        var settings = LoadSettings();
+        sortRecentFilesAlphabetically = settings.SortRecentFilesAlphabetically;
+        SortRecentFilesMenuItem.IsChecked = sortRecentFilesAlphabetically;
 
-            try {
-                this.ExtendsContentIntoTitleBar = true;
-                this.SetTitleBar(AppTitleBar);
-            } catch { }
+        RefreshRecentFilesMenu();
 
-            CenterOnScreen();
-            SetWindowIcon();
-            InitializeMica();
-            RefreshRecentFilesMenu();
-            _ = InitAsync();
-        }
-
-        private async System.Threading.Tasks.Task InitAsync()
+        Loaded += async (_, _) =>
         {
-            await SetupWebView();
+            await MarkdownView.EnsureCoreWebView2Async();
+            ShowEmptyPage();
 
-            // Open file from command line argument
             if (!string.IsNullOrEmpty(App.StartupFilePath))
-                await LoadMarkdownFile(App.StartupFilePath);
+            {
+                await LoadMarkdownFileAsync(App.StartupFilePath);
+            }
+        };
+    }
+
+    private void OpenFileCommand_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        OpenFile_Click(sender, e);
+    }
+
+    private async void RecentFilesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (isRefreshingRecentFiles || RecentFilesList.SelectedItem is not RecentFileItem item)
+        {
+            return;
         }
 
-        private void CenterOnScreen()
+        await LoadMarkdownFileAsync(item.FilePath, addToRecentFiles: false);
+    }
+
+    private void RecentFilesList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var item = FindParent<ListBoxItem>(e.OriginalSource as DependencyObject);
+        if (item is not null)
         {
-            try {
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
-                var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+            item.IsSelected = true;
+            item.Focus();
+        }
+    }
 
-                int width = 820;
-                int height = 680;
-                appWindow.Resize(new Windows.Graphics.SizeInt32(width, height));
-
-                var displayArea = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(windowId,
-                    Microsoft.UI.Windowing.DisplayAreaFallback.Primary);
-                var workArea = displayArea.WorkArea;
-                int x = (workArea.Width - width) / 2 + workArea.X;
-                int y = (workArea.Height - height) / 2 + workArea.Y;
-                appWindow.Move(new Windows.Graphics.PointInt32(x, y));
-            } catch { }
+    private void RemoveRecentFile_Click(object sender, RoutedEventArgs e)
+    {
+        if (RecentFilesList.SelectedItem is not RecentFileItem item)
+        {
+            return;
         }
 
-        private void SetWindowIcon()
+        RemoveFromRecentFiles(item.FilePath);
+    }
+
+    private async void OpenFile_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
         {
-            try {
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
-                var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+            Title = "Markdownファイルを開く",
+            Filter = "Markdownファイル (*.md;*.markdown;*.mdown;*.mkd;*.mkdn)|*.md;*.markdown;*.mdown;*.mkd;*.mkdn|テキストファイル (*.txt)|*.txt|すべてのファイル (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false
+        };
 
-                string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "app-icon.ico");
-                appWindow.SetIcon(iconPath);
+        if (dialog.ShowDialog(this) == true)
+        {
+            await LoadMarkdownFileAsync(dialog.FileName);
+        }
+    }
 
-                // カスタムタイトルバーにもアイコンを表示
-                string pngPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "app-icon.ico");
-                if (File.Exists(pngPath))
+    private void Exit_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private async void ThemeMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(currentFilePath))
+        {
+            await LoadMarkdownFileAsync(currentFilePath, addToRecentFiles: false);
+        }
+        else
+        {
+            ShowEmptyPage();
+        }
+    }
+
+    private void HistoryPaneMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        SetHistoryPaneVisible(HistoryPaneMenuItem.IsChecked);
+    }
+
+    private void SortRecentFilesMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        sortRecentFilesAlphabetically = SortRecentFilesMenuItem.IsChecked;
+        SaveSettings(new AppSettings
+        {
+            SortRecentFilesAlphabetically = sortRecentFilesAlphabetically
+        });
+        RefreshRecentFilesMenu();
+    }
+
+    private void About_Click(object sender, RoutedEventArgs e)
+    {
+        var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "app-icon.ico");
+        var icon = File.Exists(iconPath)
+            ? new System.Windows.Media.Imaging.BitmapImage(new Uri(iconPath))
+            : null;
+
+        var closeButton = new Button
+        {
+            Content = "OK",
+            Width = 88,
+            MinHeight = 28,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            IsDefault = true,
+            IsCancel = true
+        };
+
+        var dialog = new Window
+        {
+            Title = $"{AppDisplayName}について",
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            Icon = Icon,
+            Content = new Grid
+            {
+                Margin = new Thickness(22),
+                Children =
                 {
-                    var bitmapImage = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(pngPath));
-                    TitleBarIcon.Source = bitmapImage;
-                }
-            } catch { }
-        }
-
-        private void InitializeMica()
-        {
-            try {
-                if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
-                    this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
-            } catch { }
-        }
-
-        private async System.Threading.Tasks.Task SetupWebView()
-        {
-            try {
-                await WebView.EnsureCoreWebView2Async();
-
-                // Map editor dist folder for edit mode
-                string editorDistPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "editor", "dist");
-                if (Directory.Exists(editorDistPath))
-                {
-                    WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                        "editor.local", editorDistPath,
-                        Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
-                }
-
-                // Listen for messages from the editor
-                WebView.CoreWebView2.WebMessageReceived += (sender, args) => {
-                    try {
-                        string json = args.WebMessageAsJson;
-                        using var doc = JsonDocument.Parse(json);
-                        var root = doc.RootElement;
-                        string type = root.GetProperty("type").GetString() ?? "";
-
-                        if (type == "CONTENT_CHANGED")
+                    new Grid
+                    {
+                        ColumnDefinitions =
                         {
-                            if (root.TryGetProperty("content", out var content))
-                                currentMarkdown = content.GetString() ?? "";
-                            if (root.TryGetProperty("wordCount", out var wc))
+                            new ColumnDefinition { Width = GridLength.Auto },
+                            new ColumnDefinition { Width = new GridLength(24) },
+                            new ColumnDefinition { Width = GridLength.Auto }
+                        },
+                        RowDefinitions =
+                        {
+                            new RowDefinition { Height = GridLength.Auto },
+                            new RowDefinition { Height = new GridLength(18) },
+                            new RowDefinition { Height = GridLength.Auto }
+                        },
+                        Children =
+                        {
+                            new Image
                             {
-                                int words = wc.GetInt32();
-                                this.DispatcherQueue.TryEnqueue(() => {
-                                    WordCountText.Text = $"{words} words";
-                                    if (isEditMode)
-                                    {
-                                        hasUnsavedChanges = currentMarkdown != savedMarkdown;
-                                        UpdateTitleForMode();
-                                    }
-                                });
-                            }
+                                Source = icon,
+                                Width = 64,
+                                Height = 64,
+                                VerticalAlignment = VerticalAlignment.Top
+                            },
+                            new TextBlock
+                            {
+                                Text = $"{AppDisplayName}\n\n" +
+                                       "シンプルなMarkdown閲覧ツールです。\n\n" +
+                                       "技術スタック\n" +
+                                       "- .NET 9\n" +
+                                       "- WPF\n" +
+                                       "- Markdig: MarkdownをHTMLへ変換\n" +
+                                       "- Microsoft Edge WebView2: HTMLプレビュー表示\n" +
+                                       "- System.Text.Json: 最近開いたファイル履歴の保存\n\n" +
+                                       "主な機能\n" +
+                                       "- Markdown / テキストファイルの表示\n" +
+                                       "- ドラッグ＆ドロップで開く\n" +
+                                       "- 左側履歴ペイン\n" +
+                                       "- ダークモード",
+                                Width = 420,
+                                TextWrapping = TextWrapping.Wrap
+                            },
+                            closeButton
                         }
-                        else if (type == "CONTENT_RESPONSE")
-                        {
-                            if (root.TryGetProperty("content", out var content))
-                                currentMarkdown = content.GetString() ?? "";
-                        }
-                        else if (type == "LOG")
-                        {
-                            if (root.TryGetProperty("message", out var logMsg))
-                                System.Diagnostics.Debug.WriteLine($"[JS] {logMsg.GetString()}");
-                        }
-                        else if (type == "SAVE_REQUEST")
-                        {
-                            this.DispatcherQueue.TryEnqueue(async () => await SaveCurrentFile());
-                        }
-                        else if (type == "EXIT_EDIT_MODE")
-                        {
-                            this.DispatcherQueue.TryEnqueue(async () => {
-                                if (isEditMode) await ExitEditMode();
-                            });
-                        }
-                    } catch { }
-                };
-            } catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"WebView setup error: {ex}");
-            }
-        }
-
-        // ===== Theme =====
-
-        private void ToggleTheme_Click(object sender, RoutedEventArgs e)
-        {
-            isDark = !isDark;
-            UpdateThemeMenuText();
-
-            if (Content is FrameworkElement root)
-                root.RequestedTheme = isDark ? ElementTheme.Dark : ElementTheme.Light;
-
-            if (!isEditMode && !string.IsNullOrEmpty(currentMarkdown))
-                WebView.NavigateToString(BuildHtml(currentMarkdown));
-        }
-
-        private void UpdateThemeMenuText()
-        {
-            ThemeToggleItem.Text = isDark ? "ライトモードに切り替え" : "ダークモードに切り替え";
-        }
-
-        // ===== Recent Files =====
-
-        private List<string> LoadRecentFiles()
-        {
-            try {
-                if (File.Exists(RecentFilesPath))
-                {
-                    string json = File.ReadAllText(RecentFilesPath);
-                    return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
-                }
-            } catch { }
-            return new List<string>();
-        }
-
-        private void SaveRecentFiles(List<string> files)
-        {
-            try {
-                string dir = Path.GetDirectoryName(RecentFilesPath)!;
-                if (!Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-                File.WriteAllText(RecentFilesPath, JsonSerializer.Serialize(files));
-            } catch { }
-        }
-
-        private void AddToRecentFiles(string filePath)
-        {
-            var files = LoadRecentFiles();
-            files.Remove(filePath);
-            files.Insert(0, filePath);
-            if (files.Count > MaxRecentFiles)
-                files = files.Take(MaxRecentFiles).ToList();
-            SaveRecentFiles(files);
-            RefreshRecentFilesMenu();
-        }
-
-        private void RefreshRecentFilesMenu()
-        {
-            RecentFilesMenu.Items.Clear();
-            var files = LoadRecentFiles();
-
-            if (files.Count == 0)
-            {
-                var empty = new MenuFlyoutItem { Text = "(なし)", IsEnabled = false };
-                RecentFilesMenu.Items.Add(empty);
-                return;
-            }
-
-            foreach (var filePath in files)
-            {
-                var item = new MenuFlyoutItem { Text = Path.GetFileName(filePath) };
-                string captured = filePath;
-                item.Click += async (s, e) => await LoadMarkdownFile(captured);
-                RecentFilesMenu.Items.Add(item);
-            }
-
-            RecentFilesMenu.Items.Add(new MenuFlyoutSeparator());
-            var clearItem = new MenuFlyoutItem { Text = "履歴をクリア" };
-            clearItem.Click += (s, e) => {
-                SaveRecentFiles(new List<string>());
-                RefreshRecentFilesMenu();
-            };
-            RecentFilesMenu.Items.Add(clearItem);
-        }
-
-        // ===== Markdown → HTML =====
-
-        private string BuildHtml(string markdown, bool forPdf = false)
-        {
-            string bodyHtml = Markdig.Markdown.ToHtml(markdown, mdPipeline);
-            string css;
-            string hljsTheme;
-
-            if (forPdf)
-            {
-                // PDF always uses light theme with solid background
-                css = GetLightCss().Replace("rgba(255,255,255,0.6)", "#ffffff");
-                hljsTheme = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css";
-            }
-            else
-            {
-                css = isDark ? GetDarkCss() : GetLightCss();
-                hljsTheme = isDark
-                    ? "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css"
-                    : "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css";
-            }
-
-            return $@"<!DOCTYPE html>
-<html lang=""ja"">
-<head>
-<meta charset=""UTF-8"">
-<link rel=""stylesheet"" href=""{hljsTheme}"">
-<style>
-{GetBaseCss()}
-{css}
-</style>
-</head>
-<body>
-<article>{bodyHtml}</article>
-<script src=""https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js""></script>
-<script>hljs.highlightAll();</script>
-</body>
-</html>";
-        }
-
-        private static string GetBaseCss()
-        {
-            return @"
-* { box-sizing: border-box; }
-body {
-    font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo', sans-serif;
-    line-height: 1.8;
-    background: transparent;
-    max-width: 100%;
-    margin: 0 auto;
-    padding: 32px 40px;
-}
-h1 { font-size: 2em; padding-bottom: 0.3em; margin-top: 1.5em; }
-h2 { font-size: 1.5em; padding-bottom: 0.3em; margin-top: 1.5em; }
-h3 { font-size: 1.25em; margin-top: 1.5em; }
-h1:first-child, h2:first-child, h3:first-child { margin-top: 0; }
-a { text-decoration: none; }
-a:hover { text-decoration: underline; }
-code {
-    font-family: 'Cascadia Code', 'Consolas', monospace;
-    padding: 0.2em 0.4em;
-    border-radius: 4px;
-    font-size: 0.9em;
-}
-pre {
-    padding: 16px;
-    border-radius: 6px;
-    overflow-x: auto;
-    line-height: 1.5;
-}
-pre code { background: none; padding: 0; border-radius: 6px; }
-pre:has(code.hljs) { padding: 0; background: none; }
-blockquote {
-    margin: 1em 0;
-    padding: 0.5em 1em;
-}
-table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-th, td { padding: 8px 12px; text-align: left; }
-th { font-weight: 600; }
-img { max-width: 100%; height: auto; }
-hr { border: none; margin: 2em 0; }
-ul, ol { padding-left: 2em; }
-li { margin: 0.25em 0; }
-input[type='checkbox'] { margin-right: 0.5em; }
-";
-        }
-
-        private static string GetLightCss()
-        {
-            return @"
-body { color: #24292f; background: rgba(255,255,255,0.6); }
-h1, h2 { border-bottom: 1px solid #d0d7de; }
-a { color: #0969da; }
-code { background: rgba(0,0,0,0.05); }
-pre { background: rgba(0,0,0,0.04); }
-blockquote { border-left: 4px solid #d0d7de; color: #57606a; }
-th, td { border: 1px solid #d0d7de; }
-th { background: rgba(0,0,0,0.03); }
-hr { border-top: 1px solid #d0d7de; }
-";
-        }
-
-        private static string GetDarkCss()
-        {
-            return @"
-body { color: #c9d1d9; background: rgba(30,30,30,0.6); }
-h1, h2 { border-bottom: 1px solid #444c56; }
-a { color: #58a6ff; }
-code { background: rgba(255,255,255,0.1); }
-pre { background: rgba(255,255,255,0.07); }
-blockquote { border-left: 4px solid #444c56; color: #8b949e; }
-th, td { border: 1px solid #444c56; }
-th { background: rgba(255,255,255,0.05); }
-hr { border-top: 1px solid #444c56; }
-";
-        }
-
-        // ===== File Open (Menu) =====
-
-        private async void OpenFile_Click(object sender, RoutedEventArgs e)
-        {
-            try {
-                var picker = new FileOpenPicker();
-                picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-                picker.FileTypeFilter.Add(".md");
-                picker.FileTypeFilter.Add(".markdown");
-                picker.FileTypeFilter.Add(".txt");
-
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                StorageFile file = await picker.PickSingleFileAsync();
-                if (file != null)
-                    await LoadMarkdownFile(file.Path);
-            } catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"OpenFile error: {ex}");
-            }
-        }
-
-        // ===== PDF Export =====
-
-        private async void ExportPdf_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(currentMarkdown))
-                return;
-
-            try {
-                var picker = new FileSavePicker();
-                picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-                picker.FileTypeChoices.Add("PDF", new List<string> { ".pdf" });
-                picker.SuggestedFileName = string.IsNullOrEmpty(currentFilePath)
-                    ? "document"
-                    : Path.GetFileNameWithoutExtension(currentFilePath);
-
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                StorageFile file = await picker.PickSaveFileAsync();
-                if (file == null) return;
-
-                LoadingBar.Visibility = Visibility.Visible;
-                await System.Threading.Tasks.Task.Delay(30);
-
-                // Render light-theme HTML for PDF
-                string pdfHtml = BuildHtml(currentMarkdown, forPdf: true);
-
-                // Navigate to the PDF HTML, wait for it to load
-                var navTcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
-                void navHandler(WebView2 s, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs a)
-                {
-                    WebView.NavigationCompleted -= navHandler;
-                    navTcs.TrySetResult(true);
-                }
-                WebView.NavigationCompleted += navHandler;
-                WebView.NavigateToString(pdfHtml);
-                await navTcs.Task;
-
-                // Wait a moment for highlight.js to finish
-                await System.Threading.Tasks.Task.Delay(500);
-
-                // Print to PDF
-                var printSettings = WebView.CoreWebView2.Environment.CreatePrintSettings();
-                printSettings.ShouldPrintBackgrounds = true;
-                await WebView.CoreWebView2.PrintToPdfAsync(file.Path, printSettings);
-
-                // Restore the current theme view
-                WebView.NavigateToString(BuildHtml(currentMarkdown));
-
-                LoadingBar.Visibility = Visibility.Collapsed;
-            } catch (Exception ex) {
-                LoadingBar.Visibility = Visibility.Collapsed;
-                System.Diagnostics.Debug.WriteLine($"ExportPdf error: {ex}");
-            }
-        }
-
-        // ===== Drag & Drop =====
-
-        private void DropTarget_DragOver(object sender, Microsoft.UI.Xaml.DragEventArgs e)
-        {
-            if (e.DataView.Contains(StandardDataFormats.StorageItems))
-            {
-                e.AcceptedOperation = DataPackageOperation.Copy;
-                e.DragUIOverride.Caption = "開く";
-                e.DragUIOverride.IsCaptionVisible = true;
-                e.DragUIOverride.IsGlyphVisible = true;
-                DropOverlay.Visibility = Visibility.Visible;
-            }
-        }
-
-        private void DropTarget_DragLeave(object sender, Microsoft.UI.Xaml.DragEventArgs e)
-        {
-            DropOverlay.Visibility = Visibility.Collapsed;
-        }
-
-        private async void DropTarget_Drop(object sender, Microsoft.UI.Xaml.DragEventArgs e)
-        {
-            DropOverlay.Visibility = Visibility.Collapsed;
-            if (!e.DataView.Contains(StandardDataFormats.StorageItems)) return;
-
-            var items = await e.DataView.GetStorageItemsAsync();
-            var file = items.OfType<StorageFile>().FirstOrDefault(f =>
-                MarkdownExtensions.Contains(Path.GetExtension(f.Name).ToLowerInvariant()));
-
-            if (file != null)
-                await LoadMarkdownFile(file.Path);
-        }
-
-        // ===== Load & Display =====
-
-        private async System.Threading.Tasks.Task LoadMarkdownFile(string filePath)
-        {
-            try {
-                if (!File.Exists(filePath))
-                {
-                    var dialog = new ContentDialog
-                    {
-                        Title = "ファイルが見つかりません",
-                        Content = $"以下のファイルが存在しません。移動または削除された可能性があります。\n\n{filePath}",
-                        CloseButtonText = "OK",
-                        XamlRoot = this.Content.XamlRoot,
-                    };
-                    await dialog.ShowAsync();
-
-                    // 履歴から削除して更新
-                    var recentFiles = LoadRecentFiles();
-                    recentFiles.Remove(filePath);
-                    SaveRecentFiles(recentFiles);
-                    RefreshRecentFilesMenu();
-                    return;
-                }
-
-                LoadingBar.Visibility = Visibility.Visible;
-                await System.Threading.Tasks.Task.Delay(30);
-
-                currentMarkdown = await File.ReadAllTextAsync(filePath);
-                currentFilePath = filePath;
-                savedMarkdown = currentMarkdown;
-                hasUnsavedChanges = false;
-
-                string html = BuildHtml(currentMarkdown);
-
-                var tcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
-                void handler(WebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs args)
-                {
-                    WebView.NavigationCompleted -= handler;
-                    tcs.TrySetResult(true);
-                }
-                WebView.NavigationCompleted += handler;
-                WebView.NavigateToString(html);
-                await tcs.Task;
-
-                string fileName = Path.GetFileName(filePath);
-                this.Title = $"{fileName} - KoMDViewer";
-                TitleText.Text = $"{fileName} - KoMDViewer";
-                FilePathText.Text = filePath;
-
-                int words = currentMarkdown.Split(new[] { ' ', '\n', '\r', '\t' },
-                    StringSplitOptions.RemoveEmptyEntries).Length;
-                WordCountText.Text = $"{words} words";
-
-                AddToRecentFiles(filePath);
-                EditModeItem.IsEnabled = true;
-            } catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"LoadMarkdownFile error: {ex}");
-            } finally {
-                LoadingBar.Visibility = Visibility.Collapsed;
-            }
-        }
-        // ===== Edit Mode =====
-
-        private async void ToggleEditMode_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(currentFilePath)) return;
-
-            if (!isEditMode)
-            {
-                await EnterEditMode();
-            }
-            else
-            {
-                await ExitEditMode();
-            }
-        }
-
-        private async System.Threading.Tasks.Task EnterEditMode()
-        {
-            isEditMode = true;
-            EditModeItem.Text = "表示モードに戻る (Esc)";
-            SaveMenuItem.IsEnabled = true;
-
-            // Navigate to CodeMirror editor
-            var navTcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
-            void navHandler(WebView2 s, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs a)
-            {
-                WebView.NavigationCompleted -= navHandler;
-                navTcs.TrySetResult(true);
-            }
-            WebView.NavigationCompleted += navHandler;
-            WebView.Source = new Uri("https://editor.local/index.html");
-            await navTcs.Task;
-
-            // Wait for editor to initialize, then send raw markdown
-            await System.Threading.Tasks.Task.Delay(300);
-            var msg = JsonSerializer.Serialize(new { type = "SET_CONTENT", content = currentMarkdown, dark = isDark });
-            WebView.CoreWebView2.PostWebMessageAsJson(msg);
-
-            UpdateTitleForMode();
-        }
-
-        private async System.Threading.Tasks.Task ExitEditMode()
-        {
-            // Get latest content directly from CodeMirror
-            await SyncContentFromEditor();
-
-            isEditMode = false;
-            EditModeItem.Text = "編集モード";
-            SaveMenuItem.IsEnabled = false;
-
-            // Switch back to Markdig view
-            WebView.NavigateToString(BuildHtml(currentMarkdown));
-            UpdateTitleForMode();
-        }
-
-        private async System.Threading.Tasks.Task SyncContentFromEditor()
-        {
-            try {
-                string result = await WebView.CoreWebView2.ExecuteScriptAsync("window.__komdGetContent()");
-                // Result is a JSON-encoded string
-                string content = System.Text.Json.JsonSerializer.Deserialize<string>(result) ?? "";
-                if (!string.IsNullOrEmpty(content))
-                    currentMarkdown = content;
-            } catch { }
-        }
-
-        private void UpdateTitleForMode()
-        {
-            string fileName = Path.GetFileName(currentFilePath);
-            string unsaved = hasUnsavedChanges ? "● " : "";
-            string mode = isEditMode ? " [編集]" : "";
-            this.Title = $"{unsaved}{fileName}{mode} - KoMDViewer";
-            TitleText.Text = $"{unsaved}{fileName}{mode} - KoMDViewer";
-        }
-
-        // ===== Save =====
-
-        private async void SaveFile_Click(object sender, RoutedEventArgs e)
-        {
-            await SaveCurrentFile();
-        }
-
-        private async System.Threading.Tasks.Task SaveCurrentFile()
-        {
-            if (string.IsNullOrEmpty(currentFilePath) || !isEditMode) return;
-
-            try {
-                await SyncContentFromEditor();
-                await File.WriteAllTextAsync(currentFilePath, currentMarkdown);
-                savedMarkdown = currentMarkdown;
-                hasUnsavedChanges = false;
-                UpdateTitleForMode();
-            } catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"Save error: {ex}");
-            }
-        }
-
-        // ===== About =====
-
-        private async void About_Click(object sender, RoutedEventArgs e)
-        {
-            var dialog = new ContentDialog
-            {
-                Title = "KoMDViewer",
-                CloseButtonText = "閉じる",
-                XamlRoot = this.Content.XamlRoot,
-                Content = new ScrollViewer
-                {
-                    MaxHeight = 400,
-                    Content = new TextBlock
-                    {
-                        Text = "KoMDViewer v1.0.0\n" +
-                               "Markdown Viewer & Editor\n\n" +
-                               "━━━ 使用ライブラリ ━━━\n\n" +
-                               "■ Markdig v0.40.0\n" +
-                               "  License: BSD-2-Clause\n" +
-                               "  Copyright (c) Alexandre Mutel\n" +
-                               "  https://github.com/xoofx/markdig\n\n" +
-                               "■ CodeMirror 6\n" +
-                               "  License: MIT\n" +
-                               "  Copyright (c) Marijn Haverbeke and others\n" +
-                               "  https://codemirror.net/\n\n" +
-                               "■ highlight.js v11.11.1\n" +
-                               "  License: BSD-3-Clause\n" +
-                               "  Copyright (c) Ivan Sagalaev\n" +
-                               "  https://highlightjs.org/\n\n" +
-                               "■ Microsoft.Web.WebView2\n" +
-                               "  License: Microsoft Software License\n" +
-                               "  https://www.nuget.org/packages/Microsoft.Web.WebView2\n\n" +
-                               "■ Microsoft.WindowsAppSDK\n" +
-                               "  License: Microsoft Software License\n" +
-                               "  https://www.nuget.org/packages/Microsoft.WindowsAppSDK",
-                        TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
-                        IsTextSelectionEnabled = true,
-                        FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe UI"),
-                        FontSize = 13,
-                        LineHeight = 20,
                     }
                 }
-            };
-            await dialog.ShowAsync();
+            }
+        };
+
+        Grid.SetColumn((UIElement)((Grid)((Grid)dialog.Content).Children[0]).Children[1], 2);
+        Grid.SetRow(closeButton, 2);
+        Grid.SetColumn(closeButton, 2);
+        closeButton.Click += (_, _) => dialog.Close();
+        dialog.ShowDialog();
+    }
+
+    private void DropTarget_DragEnter(object sender, DragEventArgs e)
+    {
+        UpdateDropState(e);
+    }
+
+    private void DropTarget_DragOver(object sender, DragEventArgs e)
+    {
+        UpdateDropState(e);
+    }
+
+    private void DropTarget_DragLeave(object sender, DragEventArgs e)
+    {
+        HideDropOverlay();
+    }
+
+    private async void DropTarget_Drop(object sender, DragEventArgs e)
+    {
+        HideDropOverlay();
+
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return;
         }
+
+        var files = (string[]?)e.Data.GetData(DataFormats.FileDrop);
+        var filePath = files?.FirstOrDefault(IsMarkdownFile);
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            await LoadMarkdownFileAsync(filePath);
+        }
+    }
+
+    private void UpdateDropState(DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            var files = (string[]?)e.Data.GetData(DataFormats.FileDrop);
+            if (files?.Any(IsMarkdownFile) == true)
+            {
+                e.Effects = DragDropEffects.Copy;
+                ShowDropOverlay();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        e.Effects = DragDropEffects.None;
+        HideDropOverlay();
+        e.Handled = true;
+    }
+
+    private void ShowDropOverlay()
+    {
+        MarkdownView.Visibility = Visibility.Hidden;
+        DropOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void HideDropOverlay()
+    {
+        DropOverlay.Visibility = Visibility.Collapsed;
+        MarkdownView.Visibility = Visibility.Visible;
+    }
+
+    private async Task LoadMarkdownFileAsync(string filePath, bool addToRecentFiles = true)
+    {
+        if (!File.Exists(filePath))
+        {
+            MessageBox.Show(this, $"ファイルが見つかりません:\n\n{filePath}", "ファイルが見つかりません", MessageBoxButton.OK, MessageBoxImage.Warning);
+            RemoveFromRecentFiles(filePath);
+            return;
+        }
+
+        if (!IsMarkdownFile(filePath))
+        {
+            MessageBox.Show(this, "Markdownまたはテキストファイルを選んでください。", "対応していないファイル", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        try
+        {
+            var markdown = await File.ReadAllTextAsync(filePath);
+            var html = BuildHtml(markdown, filePath);
+
+            Directory.CreateDirectory(AppDataDirectory);
+            await MarkdownView.EnsureCoreWebView2Async();
+
+            currentFilePath = filePath;
+            MarkdownView.NavigateToString(html);
+            WelcomePanel.Visibility = Visibility.Collapsed;
+
+            var fileName = Path.GetFileName(filePath);
+            Title = $"{fileName} - {AppDisplayName}";
+            FilePathText.Text = filePath;
+            WordCountText.Text = $"{CountWords(markdown):N0} words";
+
+            if (addToRecentFiles)
+            {
+                AddToRecentFiles(filePath);
+            }
+            else
+            {
+                SelectRecentFile(filePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "ファイルを開けませんでした", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private string BuildHtml(string markdown, string filePath)
+    {
+        var bodyHtml = Markdig.Markdown.ToHtml(markdown, markdownPipeline);
+        var baseUri = new Uri(Path.GetDirectoryName(filePath)! + Path.DirectorySeparatorChar).AbsoluteUri;
+        var themeCss = ThemeMenuItem.IsChecked
+            ? """
+              body { color: #d6deeb; background: #111827; }
+              article { background: #111827; }
+              h1, h2 { border-bottom-color: #374151; }
+              a { color: #7dd3fc; }
+              code { background: #1f2937; }
+              pre { background: #0f172a; }
+              blockquote { border-left-color: #4b5563; color: #a7b0bf; }
+              th, td { border-color: #374151; }
+              th { background: #1f2937; }
+              hr { border-top-color: #374151; }
+              """
+            : """
+              body { color: #24292f; background: #ffffff; }
+              article { background: #ffffff; }
+              h1, h2 { border-bottom-color: #d0d7de; }
+              a { color: #0969da; }
+              code { background: rgba(0,0,0,0.06); }
+              pre { background: #f6f8fa; }
+              blockquote { border-left-color: #d0d7de; color: #57606a; }
+              th, td { border-color: #d0d7de; }
+              th { background: #f6f8fa; }
+              hr { border-top-color: #d0d7de; }
+              """;
+
+        return $$"""
+            <!doctype html>
+            <html lang="ja">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <base href="{{baseUri}}">
+              <style>
+                * { box-sizing: border-box; }
+                body {
+                  margin: 0;
+                  font-family: "Segoe UI", "Yu Gothic UI", Meiryo, sans-serif;
+                  line-height: 1.75;
+                }
+                article {
+                  max-width: 920px;
+                  margin: 0 auto;
+                  padding: 36px 44px 64px;
+                }
+                h1 { font-size: 2rem; margin: 0 0 0.75em; padding-bottom: 0.3em; border-bottom: 1px solid; }
+                h2 { font-size: 1.5rem; margin-top: 1.6em; padding-bottom: 0.3em; border-bottom: 1px solid; }
+                h3 { font-size: 1.25rem; margin-top: 1.4em; }
+                a { text-decoration: none; }
+                a:hover { text-decoration: underline; }
+                code {
+                  font-family: "Cascadia Code", Consolas, monospace;
+                  padding: 0.15em 0.35em;
+                  border-radius: 4px;
+                  font-size: 0.9em;
+                }
+                pre {
+                  padding: 16px;
+                  border-radius: 6px;
+                  overflow-x: auto;
+                  line-height: 1.5;
+                }
+                pre code { background: transparent; padding: 0; }
+                blockquote { margin: 1em 0; padding: 0.4em 1em; border-left: 4px solid; }
+                table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+                th, td { border: 1px solid; padding: 8px 12px; text-align: left; }
+                th { font-weight: 600; }
+                img { max-width: 100%; height: auto; }
+                hr { border: 0; border-top: 1px solid; margin: 2em 0; }
+                ul, ol { padding-left: 2em; }
+                li { margin: 0.25em 0; }
+                {{themeCss}}
+              </style>
+            </head>
+            <body>
+              <article>{{bodyHtml}}</article>
+            </body>
+            </html>
+            """;
+    }
+
+    private void ShowEmptyPage()
+    {
+        var background = ThemeMenuItem.IsChecked ? "#111827" : "#ffffff";
+        MarkdownView.NavigateToString($"""
+            <!doctype html>
+            <html>
+            <body style="margin:0;background:{background};"></body>
+            </html>
+            """);
+    }
+
+    private void RefreshRecentFilesMenu()
+    {
+        var recentFiles = GetRecentFilesForDisplay();
+
+        RecentFilesMenu.Items.Clear();
+        RefreshRecentFilesList(recentFiles);
+
+        if (recentFiles.Count == 0)
+        {
+            RecentFilesMenu.Items.Add(new MenuItem { Header = "(なし)", IsEnabled = false });
+            return;
+        }
+
+        foreach (var filePath in recentFiles)
+        {
+            var item = new MenuItem
+            {
+                Header = Path.GetFileName(filePath),
+                ToolTip = filePath
+            };
+            item.Click += async (_, _) => await LoadMarkdownFileAsync(filePath, addToRecentFiles: false);
+            RecentFilesMenu.Items.Add(item);
+        }
+
+        RecentFilesMenu.Items.Add(new Separator());
+
+        var clearItem = new MenuItem { Header = "履歴をクリア" };
+        clearItem.Click += (_, _) =>
+        {
+            SaveRecentFiles([]);
+            RefreshRecentFilesMenu();
+        };
+        RecentFilesMenu.Items.Add(clearItem);
+    }
+
+    private static List<string> LoadRecentFiles()
+    {
+        try
+        {
+            if (File.Exists(RecentFilesPath))
+            {
+                return JsonSerializer.Deserialize<List<string>>(File.ReadAllText(RecentFilesPath)) ?? [];
+            }
+        }
+        catch
+        {
+        }
+
+        return [];
+    }
+
+    private List<string> GetRecentFilesForDisplay()
+    {
+        var files = LoadRecentFiles();
+        return sortRecentFilesAlphabetically
+            ? files
+                .OrderBy(Path.GetFileName, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(path => path, StringComparer.CurrentCultureIgnoreCase)
+                .ToList()
+            : files;
+    }
+
+    private static AppSettings LoadSettings()
+    {
+        try
+        {
+            if (File.Exists(SettingsPath))
+            {
+                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath)) ?? new AppSettings();
+            }
+        }
+        catch
+        {
+        }
+
+        return new AppSettings();
+    }
+
+    private static void SaveSettings(AppSettings settings)
+    {
+        Directory.CreateDirectory(AppDataDirectory);
+        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(settings));
+    }
+
+    private void AddToRecentFiles(string filePath)
+    {
+        var files = LoadRecentFiles();
+        files.RemoveAll(path => string.Equals(path, filePath, StringComparison.OrdinalIgnoreCase));
+        files.Insert(0, filePath);
+        SaveRecentFiles(files.Take(MaxRecentFiles).ToList());
+        RefreshRecentFilesMenu();
+        SelectRecentFile(filePath);
+    }
+
+    private void RemoveFromRecentFiles(string filePath)
+    {
+        var files = LoadRecentFiles();
+        files.RemoveAll(path => string.Equals(path, filePath, StringComparison.OrdinalIgnoreCase));
+        SaveRecentFiles(files);
+        RefreshRecentFilesMenu();
+    }
+
+    private void RefreshRecentFilesList(List<string> recentFiles)
+    {
+        try
+        {
+            isRefreshingRecentFiles = true;
+            RecentFilesList.ItemsSource = recentFiles
+                .Select(path => new RecentFileItem(path))
+                .ToList();
+
+            var hasItems = recentFiles.Count > 0;
+            RecentFilesList.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
+            EmptyRecentFilesText.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
+            SelectRecentFile(currentFilePath);
+        }
+        finally
+        {
+            isRefreshingRecentFiles = false;
+        }
+    }
+
+    private void SetHistoryPaneVisible(bool isVisible)
+    {
+        if (!isVisible && HistoryPaneColumn.Width.Value > 0)
+        {
+            historyPaneWidth = HistoryPaneColumn.Width;
+        }
+
+        HistoryPane.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+        HistorySplitter.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+        HistoryPaneColumn.Width = isVisible ? historyPaneWidth : new GridLength(0);
+        HistoryPaneColumn.MinWidth = isVisible ? 180 : 0;
+        HistorySplitterColumn.Width = isVisible ? new GridLength(5) : new GridLength(0);
+    }
+
+    private void SelectRecentFile(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath))
+        {
+            RecentFilesList.SelectedItem = null;
+            return;
+        }
+
+        foreach (var item in RecentFilesList.Items.OfType<RecentFileItem>())
+        {
+            if (string.Equals(item.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+            {
+                RecentFilesList.SelectedItem = item;
+                RecentFilesList.ScrollIntoView(item);
+                return;
+            }
+        }
+    }
+
+    private static void SaveRecentFiles(List<string> files)
+    {
+        Directory.CreateDirectory(AppDataDirectory);
+        File.WriteAllText(RecentFilesPath, JsonSerializer.Serialize(files));
+    }
+
+    private static bool IsMarkdownFile(string filePath)
+    {
+        return MarkdownExtensions.Contains(Path.GetExtension(filePath), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static int CountWords(string text)
+    {
+        return text.Split([' ', '\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries).Length;
+    }
+
+    private static T? FindParent<T>(DependencyObject? child) where T : DependencyObject
+    {
+        while (child is not null)
+        {
+            if (child is T parent)
+            {
+                return parent;
+            }
+
+            child = System.Windows.Media.VisualTreeHelper.GetParent(child);
+        }
+
+        return null;
+    }
+
+    private sealed class RecentFileItem(string filePath)
+    {
+        public string FilePath { get; } = filePath;
+
+        public string DisplayName { get; } = Path.GetFileName(filePath);
+    }
+
+    private sealed class AppSettings
+    {
+        public bool SortRecentFilesAlphabetically { get; set; }
     }
 }

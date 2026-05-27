@@ -1,0 +1,47 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore KoMDViewer.csproj
+
+      - name: Build
+        run: dotnet build KoMDViewer.csproj -c Release -r win-x64 --no-restore
+
+      - name: Create ZIP artifact
+        shell: pwsh
+        run: |
+          $version = "${{ github.run_number }}"
+          .\build-and-package.ps1 -Version "ci-$version"
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: KoMDViewerWPF-release
+          path: dist/KoMDViewerWPF-vci-${{ github.run_number }}-release.zip
+
+      - name: Upload Vector package
+        uses: actions/upload-artifact@v4
+        with:
+          name: KoMDViewerWPF-vector
+          path: dist/KoMDViewerWPF-vci-${{ github.run_number }}-vector.zip

@@ -1,58 +1,34 @@
 @echo off
 chcp 65001 > nul
-title KoMDViewer - ランタイムインストーラー
+title KoMDViewer WPF - Runtime Checker
 
 echo ============================================
-echo  KoMDViewer - ランタイムインストーラー
+echo  KoMDViewer WPF - Runtime Checker
 echo ============================================
 echo.
-echo KoMDViewer の実行に必要なランタイムをインストールします。
-echo.
 
-:: --- [1/2] .NET 9.0 Desktop Runtime ---
-echo [1/2] .NET 9.0 Desktop Runtime を確認中...
+echo [1/2] Checking .NET 9 Desktop Runtime...
 dotnet --list-runtimes 2>nul | findstr /C:"Microsoft.WindowsDesktop.App 9." > nul
 if %errorlevel% == 0 (
-    echo       OK: 既にインストール済みです。
+    echo       OK: .NET 9 Desktop Runtime is installed.
 ) else (
-    echo       未インストールです。ダウンロードページを開きます...
+    echo       Missing: .NET 9 Desktop Runtime.
     start "" "https://dotnet.microsoft.com/download/dotnet/9.0"
-    echo.
-    echo       ブラウザが開きました。
-    echo       .NET Desktop Runtime 9.0.x の Windows x64 インストーラーを
-    echo       ダウンロードして実行してください。
-    echo.
-    echo       インストール完了後、Enterキーを押してください...
-    pause > nul
+    echo       Install ".NET Desktop Runtime 9.0.x" for Windows x64.
 )
 
 echo.
-
-:: --- [2/2] Windows App Runtime 2.x ---
-echo [2/2] Windows App Runtime 2.x を確認中...
-powershell -NoProfile -Command "exit $(if (Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.2*' -EA SilentlyContinue) {0} else {1})"
+echo [2/2] Checking Microsoft Edge WebView2 Runtime...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "exit $(if ((Test-Path 'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') -or (Test-Path 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') -or (Test-Path 'HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}')) {0} else {1})"
 if %errorlevel% == 0 (
-    echo       OK: 既にインストール済みです。
-    goto :done
-)
-
-echo       未インストールです。インストーラーをダウンロード中...
-echo.
-powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://aka.ms/windowsappruntimeinstall-x64' -OutFile '%TEMP%\WARInstall.exe' -UseBasicParsing -MaximumRedirection 10"
-if exist "%TEMP%\WARInstall.exe" (
-    echo       ダウンロード完了。インストールを開始します...
-    "%TEMP%\WARInstall.exe"
-    del "%TEMP%\WARInstall.exe" 2>nul
+    echo       OK: WebView2 Runtime is installed.
 ) else (
-    echo       ダウンロードに失敗しました。
-    echo       以下のURLから手動でインストールしてください:
-    echo       https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads
+    echo       Missing or not detected: WebView2 Runtime.
+    start "" "https://developer.microsoft.com/microsoft-edge/webview2/"
+    echo       Install the Evergreen WebView2 Runtime if the preview pane does not work.
 )
 
-:done
 echo.
-echo ============================================
-echo  完了しました。KoMDViewer.exe を起動できます。
-echo ============================================
+echo Done. Start KoMDViewerWPF.exe after installing any missing runtime.
 echo.
 pause

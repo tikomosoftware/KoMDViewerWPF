@@ -1,8 +1,7 @@
-# KoMDViewer リリースビルドスクリプト
+# KoMDViewer WPF リリースビルドスクリプト
 # 2つのパッケージを作成: リリース版、Vector配布用
 #
-# 注意: dotnet publish では WinUI 3 の .xbf ファイルが出力されない既知問題があるため、
-# dotnet build の出力をそのままパッケージングする方式を採用しています。
+# dotnet build の出力をそのままパッケージングします。
 
 param(
     [string]$Version = "1.1",
@@ -11,7 +10,7 @@ param(
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-Write-Host "KoMDViewer v$Version Build and Package Script" -ForegroundColor Green
+Write-Host "KoMDViewer WPF v$Version Build and Package Script" -ForegroundColor Green
 Write-Host "====================================" -ForegroundColor Green
 Write-Host ""
 
@@ -20,9 +19,9 @@ $ProjectFile = "KoMDViewer.csproj"
 $DistDir = "dist"
 $TempReleaseDir = "$DistDir\temp_release"
 $TempVectorDir = "$DistDir\temp_vector"
-$ReleaseZipFile = "$DistDir\KoMDViewer-v$Version-release.zip"
-$VectorZipFile = "$DistDir\KoMDViewer-v$Version-vector.zip"
-$BuildOutputDir = "bin\Release\net9.0-windows10.0.19041.0\win-x64"
+$ReleaseZipFile = "$DistDir\KoMDViewerWPF-v$Version-release.zip"
+$VectorZipFile = "$DistDir\KoMDViewerWPF-v$Version-vector.zip"
+$BuildOutputDir = "bin\Release\net9.0-windows\win-x64"
 
 # ZIP作成ヘルパー関数
 function New-ZipFromDirectory {
@@ -60,7 +59,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed!" -ForegroundColor Red
     exit 1
 }
-Write-Host "  ✓ Build completed" -ForegroundColor Green
+    Write-Host "  OK Build completed" -ForegroundColor Green
 Write-Host ""
 
 # ========================================
@@ -80,11 +79,7 @@ try {
         $_.Extension -ne ".pdb"
     } | Copy-Item -Destination $TempReleaseDir
 
-    # Microsoft.UI.Xaml.dll はシステムのWindowsAppRuntimeから読み込まれるため除外
-    # （同梱するとシステムDLLと競合してクラッシュする）
-    Remove-Item "$TempReleaseDir\Microsoft.UI.Xaml.dll" -ErrorAction SilentlyContinue
-
-    # サブフォルダ（editor, Resources）をコピー
+    # サブフォルダ（Resources など）をコピー
     Get-ChildItem -Path $BuildOutputDir -Directory | Copy-Item -Destination $TempReleaseDir -Recurse
 
     Copy-Item "README.md" $TempReleaseDir
@@ -93,18 +88,18 @@ try {
     foreach ($f in @("install-runtime.bat", "install-runtime.ps1")) {
         if (Test-Path $f) {
             Copy-Item $f $TempReleaseDir
-            Write-Host "  ✓ $f included" -ForegroundColor DarkGreen
+            Write-Host "  OK $f included" -ForegroundColor DarkGreen
         }
     }
 
     Start-Sleep -Seconds 2
 
     New-ZipFromDirectory -SourceDir $TempReleaseDir -DestinationZip $ReleaseZipFile
-    Write-Host "  ✓ Release package completed" -ForegroundColor Green
+    Write-Host "  OK Release package completed" -ForegroundColor Green
     $releaseBuildSuccess = $true
 }
 catch {
-    Write-Host "  ✗ Failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "  ERROR Failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 Write-Host ""
 
@@ -122,7 +117,7 @@ try {
         Copy-Item "README_VECTOR.md" "$TempVectorDir\README.md"
 
         New-ZipFromDirectory -SourceDir $TempVectorDir -DestinationZip $VectorZipFile
-        Write-Host "  ✓ Vector package completed" -ForegroundColor Green
+        Write-Host "  OK Vector package completed" -ForegroundColor Green
         $vectorBuildSuccess = $true
     }
     else {
@@ -130,7 +125,7 @@ try {
     }
 }
 catch {
-    Write-Host "  ✗ Failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "  ERROR Failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 Write-Host ""
 
@@ -151,7 +146,7 @@ Write-Host ""
 if ($releaseBuildSuccess -and (Test-Path $ReleaseZipFile)) {
     $info = Get-Item $ReleaseZipFile
     $hash = (Get-FileHash $ReleaseZipFile -Algorithm SHA256).Hash
-    Write-Host "📦 Release:" -ForegroundColor Cyan
+    Write-Host "Release:" -ForegroundColor Cyan
     Write-Host "   $($info.Name)  $([math]::Round($info.Length / 1MB, 2)) MB" -ForegroundColor White
     Write-Host "   SHA256: $hash" -ForegroundColor Gray
     Write-Host ""
@@ -159,11 +154,11 @@ if ($releaseBuildSuccess -and (Test-Path $ReleaseZipFile)) {
 
 if ($vectorBuildSuccess -and (Test-Path $VectorZipFile)) {
     $info = Get-Item $VectorZipFile
-    Write-Host "📦 Vector:" -ForegroundColor Cyan
+    Write-Host "Vector:" -ForegroundColor Cyan
     Write-Host "   $($info.Name)  $([math]::Round($info.Length / 1MB, 2)) MB" -ForegroundColor White
     Write-Host ""
 }
 
-Write-Host "⏱ Build time: $BuildTimeSeconds seconds" -ForegroundColor White
-Write-Host "📁 Output: $DistDir\" -ForegroundColor White
+Write-Host "Build time: $BuildTimeSeconds seconds" -ForegroundColor White
+Write-Host "Output: $DistDir\" -ForegroundColor White
 Write-Host ""

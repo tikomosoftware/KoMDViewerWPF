@@ -1,31 +1,22 @@
-using System;
-using Microsoft.UI.Xaml;
+using System.IO;
+using System.Windows;
 
-namespace KoMDViewer
+namespace KoMDViewer;
+
+public partial class App : Application
 {
-    public partial class App : Application
+    public static string StartupFilePath { get; private set; } = string.Empty;
+
+    protected override void OnStartup(StartupEventArgs e)
     {
-        private Window m_window;
+        base.OnStartup(e);
 
-        public static string StartupFilePath { get; private set; } = "";
-
-        public App()
+        if (e.Args.Length > 0 && File.Exists(e.Args[0]))
         {
-            this.InitializeComponent();
+            StartupFilePath = e.Args[0];
         }
 
-        protected override void OnLaunched(LaunchActivatedEventArgs args)
-        {
-            var cmdArgs = Environment.GetCommandLineArgs();
-            if (cmdArgs.Length > 1)
-            {
-                string candidate = cmdArgs[1];
-                if (System.IO.File.Exists(candidate))
-                    StartupFilePath = candidate;
-            }
-
-            m_window = new MainWindow();
-            m_window.Activate();
-        }
+        var window = new MainWindow();
+        window.Show();
     }
 }
