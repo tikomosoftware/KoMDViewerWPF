@@ -23,7 +23,7 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Restore
-        run: dotnet restore KoMDViewer.csproj
+        run: dotnet restore KoMDViewer.csproj -r win-x64
 
       - name: Build
         run: dotnet build KoMDViewer.csproj -c Release -r win-x64 --no-restore
