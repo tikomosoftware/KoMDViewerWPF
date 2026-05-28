@@ -61,7 +61,7 @@ dotnet run
 Release package:
 
 ```powershell
-.\build-and-package.ps1 -Version "1.1"
+.\build-and-package.ps1 -Version "1.2"
 ```
 
 ## Tech Stack

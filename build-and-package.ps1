@@ -4,7 +4,7 @@
 # dotnet build の出力をそのままパッケージングします。
 
 param(
-    [string]$Version = "1.1",
+    [string]$Version = "1.2",
     [switch]$Clean
 )
 
